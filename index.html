@@ -3,19 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Imposter — Lobby</title>
+  <title>Imposter — Lobby & Game</title>
   <style>
     body{font-family:sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
     .card{background:#1a1f2b;padding:20px;border-radius:12px;width:400px}
     input,button{width:100%;padding:10px;margin:5px 0;border-radius:6px;border:none}
     .btn-primary{background:#4a90e2;color:white}
     .btn-success{background:#28a745;color:white}
-    #playersList div{padding:6px;background:rgba(255,255,255,0.05);margin-bottom:4px;border-radius:6px}
-    #gameUI{display:none}
+    #playersList div,#aliveList div{padding:6px;background:rgba(255,255,255,0.05);margin-bottom:4px;border-radius:6px}
+    #gameUI,#gameBoard{display:none}
+    button{cursor:pointer}
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="lobbyCard">
     <h2>Imposter Lobby</h2>
     <input id="name" placeholder="Your name" />
     <button id="createBtn" class="btn-primary">Create Lobby</button>
@@ -33,6 +34,16 @@
   <div id="gameUI" class="card">
     <h2>Game in Progress</h2>
     <p id="yourRole"></p>
+    <div id="gameBoard">
+      <h3>Alive Players</h3>
+      <div id="aliveList"></div>
+      <button id="callMeetingBtn">Call Meeting</button>
+      <div id="voteSection" style="display:none; margin-top:10px;">
+        <h4>Vote out a player</h4>
+        <div id="voteList"></div>
+        <button id="submitVoteBtn">Submit Vote</button>
+      </div>
+    </div>
   </div>
 
 <script type="module">
@@ -46,10 +57,13 @@ const db = getDatabase(app);
 let clientId = localStorage.getItem('imposter_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
 localStorage.setItem('imposter_clientId', clientId);
 let currentLobby=null;
-
 const el=id=>document.getElementById(id);
-const logMsg=t=>console.log(t);
-const genCode=()=>Math.random().toString(36).substring(2,8).toUpperCase();
+const gameUI=el('gameUI');
+const aliveList=el('aliveList');
+const callMeetingBtn=el('callMeetingBtn');
+const voteSection=el('voteSection');
+const voteList=el('voteList');
+const submitVoteBtn=el('submitVoteBtn');
 
 function updatePlayerList(code, hostId){
   const playersRef = ref(db,'lobbies/'+code+'/players');
@@ -66,24 +80,61 @@ function updatePlayerList(code, hostId){
   });
 }
 
+function listenGameStart(code){
+  const lobbyRef = ref(db,'lobbies/'+code);
+  onValue(lobbyRef, snap=>{
+    const data=snap.val(); if(!data) return;
+    updateGameUI(data);
+    if(data.started){
+      el('lobbyCard').style.display='none';
+      gameUI.style.display='block';
+    }
+  });
+}
+
+function updateGameUI(data){
+  const me=localStorage.getItem('imposter_playerId');
+  const role=data.players?.[me]?.role||'unknown';
+  el('yourRole').textContent='Your role: '+role;
+  aliveList.innerHTML='';
+  Object.entries(data.players).forEach(([id,p])=>{
+    if(p.alive){
+      const div=document.createElement('div');
+      div.textContent=p.name+(id===me?' (you)':'');
+      if(data.players[me].role==='imposter' && id!==me){
+        div.style.cursor='pointer';
+        div.onclick=async()=>{
+          await update(ref(db,'lobbies/'+currentLobby+'/players/'+id), {alive:false});
+        };
+      }
+      aliveList.appendChild(div);
+    }
+  });
+}
+
 async function createLobby(){
   const name=el('name').value.trim(); if(!name)return alert('Enter name');
-  const code=genCode(); currentLobby=code;
+  const code=Math.random().toString(36).substring(2,8).toUpperCase();
+  currentLobby=code;
   await set(ref(db,'lobbies/'+code),{hostId:clientId,started:false,created:serverTimestamp()});
   await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId,alive:true,role:'unassigned',joined:serverTimestamp()});
   localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
   el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
   updatePlayerList(code,clientId);
+  listenGameStart(code);
 }
 
 async function joinLobby(){
-  const name=el('name').value.trim(); const code=el('joinCode').value.trim().toUpperCase();
+  const name=el('name').value.trim();
+  const code=el('joinCode').value.trim().toUpperCase();
   if(!name||!code)return alert('Enter name and code');
   const snap=await get(ref(db,'lobbies/'+code)); if(!snap.exists())return alert('Lobby not found');
+  currentLobby=code;
   await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId,alive:true,role:'unassigned',joined:serverTimestamp()});
-  currentLobby=code; localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
+  localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
   el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
   updatePlayerList(code,snap.val().hostId);
+  listenGameStart(code);
 }
 
 async function startGame(){
@@ -91,8 +142,7 @@ async function startGame(){
   const lobbyRef=ref(db,'lobbies/'+currentLobby);
   const snap=await get(lobbyRef); if(!snap.exists())return;
   const players=snap.val().players||{};
-  const keys=Object.keys(players);
-  if(keys.length<3)return alert('Need at least 3 players');
+  const keys=Object.keys(players); if(keys.length<3) return alert('Need at least 3 players');
   const impostersCount=Math.max(1,Math.floor(keys.length/4));
   const shuffled=keys.sort(()=>Math.random()-0.5);
   const updates={started:true};
@@ -104,21 +154,32 @@ el('createBtn').onclick=createLobby;
 el('joinBtn').onclick=joinLobby;
 el('startBtn').onclick=startGame;
 
-const gameUI=el('gameUI');
-const lobbyCode=localStorage.getItem('imposter_lobby');
-if(lobbyCode){
-  const lobbyRef=ref(db,'lobbies/'+lobbyCode);
-  onValue(lobbyRef,snap=>{
-    const data=snap.val(); if(!data)return;
-    if(data.started){
-      document.querySelector('.card').style.display='none';
-      gameUI.style.display='block';
-      const me=localStorage.getItem('imposter_playerId');
-      const role=data.players?.[me]?.role||'unknown';
-      el('yourRole').textContent='Your role: '+role;
-    }
+// Meetings
+callMeetingBtn.onclick=()=>{
+  voteSection.style.display='block';
+  voteList.innerHTML='';
+  const me=localStorage.getItem('imposter_playerId');
+  const playersRef=ref(db,'lobbies/'+currentLobby+'/players');
+  get(playersRef).then(snap=>{
+    snap.forEach(child=>{
+      const p=child.val(); if(p.alive && child.key!==me){
+        const btn=document.createElement('button'); btn.textContent=p.name;
+        btn.onclick=()=>voteList.setAttribute('data-vote',child.key);
+        voteList.appendChild(btn);
+      }
+    });
   });
-}
+};
+
+submitVoteBtn.onclick=async()=>{
+  const votedId=voteList.getAttribute('data-vote'); if(!votedId) return alert('Select a player');
+  await update(ref(db,'lobbies/'+currentLobby+'/players/'+votedId),{alive:false});
+  voteSection.style.display='none';
+};
+
+// Auto rejoin
+const savedLobby=localStorage.getItem('imposter_lobby');
+if(savedLobby) listenGameStart(savedLobby);
 </script>
 </body>
 </html>
