@@ -1,237 +1,102 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Imposter</title>
-    
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    
-    <style>
-        /* SLEEK DARK UI */
-        :root {
-            --primary: #4CAF50;
-            --secondary: #2196F3;
-            --bg: #1a1a2e;
-            --card: #16213e;
-            --text: #e94560;
-            --white: #ffffff;
-        }
-        body { background: var(--bg); color: var(--white); font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-        .screen { display: none; width: 90%; max-width: 500px; text-align: center; }
-        .screen.active { display: block; animation: fadeIn 0.5s; }
-        .card { background: var(--card); padding: 2rem; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        input { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; background: #0f3460; color: white; font-size: 1.1rem; }
-        button { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; transition: 0.2s; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-secondary { background: var(--secondary); color: white; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        h1 { color: var(--text); margin-bottom: 0.5rem; }
-        .code { font-size: 2rem; letter-spacing: 5px; color: var(--primary); font-weight: bold; margin: 20px 0; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
+<meta charset="utf-8" />
+<title>Imposter Lobby</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+#game { display: none; }
+</style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, child, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDlm1nd6P6VY6HiFLgy2rZPeLLr-VwYaD4",
+  authDomain: "imposter-5142b.firebaseapp.com",
+  databaseURL: "https://imposter-5142b-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "imposter-5142b",
+  storageBucket: "imposter-5142b.firebasestorage.app",
+  messagingSenderId: "500677632460",
+  appId: "1:500677632460:web:236568f1cb93c31a7bbd69",
+  measurementId: "G-RWF1030VF1"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+function generateCode() {
+  return Math.random().toString(36).substring(2, 7).toUpperCase();
+}
+
+window.createLobby = async function () {
+  const name = document.getElementById("playerName").value.trim();
+  if (!name) return alert("Enter your name");
+
+  const code = generateCode();
+  const lobbyRef = ref(db, `lobbies/${code}`);
+
+  try {
+    await set(lobbyRef, {
+      players: { [name]: true }
+    });
+    joinLobbyUI(code, name);
+  } catch (err) {
+    alert("Failed to create lobby: " + err.message);
+  }
+};
+
+window.joinLobby = async function () {
+  const name = document.getElementById("playerName").value.trim();
+  const code = document.getElementById("lobbyCode").value.trim().toUpperCase();
+  if (!name || !code) return alert("Enter name and code");
+
+  const lobbyRef = ref(db, `lobbies/${code}`);
+  const snap = await get(lobbyRef);
+
+  if (!snap.exists()) return alert("Lobby not found");
+
+  try {
+    await set(ref(db, `lobbies/${code}/players/${name}`), true);
+    joinLobbyUI(code, name);
+  } catch (err) {
+    alert("Error joining: " + err.message);
+  }
+};
+
+function joinLobbyUI(code, name) {
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("game").style.display = "block";
+  document.getElementById("codeDisplay").innerText = code;
+
+  const playersRef = ref(db, `lobbies/${code}/players`);
+  onValue(playersRef, snap => {
+    const list = document.getElementById("playerList");
+    list.innerHTML = "";
+    snap.forEach(child => {
+      const li = document.createElement("li");
+      li.textContent = child.key;
+      list.appendChild(li);
+    });
+  });
+}
+</script>
 </head>
 <body>
+<div id="lobby">
+  <h2>Imposter Lobby</h2>
+  <input id="playerName" placeholder="Your name" />
+  <br><br>
+  <button onclick="createLobby()">Create Lobby</button>
+  <br><br>
+  <input id="lobbyCode" placeholder="Code to join" />
+  <button onclick="joinLobby()">Join</button>
+</div>
 
-    <div id="lobby-screen" class="screen active">
-        <h1>🕵️ IMPOSTER</h1>
-        <div class="card">
-            <input type="text" id="username" placeholder="Enter Your Name" maxlength="12">
-            <button id="btn-create" class="btn-primary" disabled>Create Game</button>
-            <p style="opacity: 0.5; margin: 10px 0;">— OR —</p>
-            <input type="text" id="join-code" placeholder="Lobby Code (4 letters)" maxlength="4" style="text-transform:uppercase;">
-            <button id="btn-join" class="btn-secondary" disabled>Join Game</button>
-        </div>
-    </div>
-
-    <div id="game-screen" class="screen">
-        <div class="card">
-            <p>LOBBY CODE</p>
-            <div id="display-code" class="code">----</div>
-            <h2 id="role-text" style="color: var(--secondary);">Waiting...</h2>
-            <hr style="border: 1px solid #0f3460; margin: 20px 0;">
-            
-            <div id="game-area">
-                <h3 id="secret-word" style="color: var(--text); font-size: 1.5rem;"></h3>
-                <p id="status-log" style="font-style: italic; color: #aaa;">Waiting for host to start...</p>
-                
-                <div id="input-container" style="display:none;">
-                    <input type="text" id="clue-input" placeholder="Type your clue...">
-                    <button id="btn-submit" class="btn-primary">Send Clue</button>
-                </div>
-            </div>
-
-            <div style="margin-top: 20px; text-align: left;">
-                <h4>Players:</h4>
-                <ul id="player-list" style="padding-left: 20px; color: #aaa;"></ul>
-            </div>
-
-            <button id="btn-start" class="btn-primary" style="display:none; margin-top: 20px;">START GAME</button>
-        </div>
-    </div>
-
-    <script>
-        // 1. FIREBASE CONFIG
-        const firebaseConfig = {
-          apiKey: "AIzaSyDlm1nd6P6VY6HiFLgy2rZPeLLr-VwYaD4",
-          authDomain: "imposter-5142b.firebaseapp.com",
-          projectId: "imposter-5142b",
-          storageBucket: "imposter-5142b.firebasestorage.app",
-          messagingSenderId: "500677632460",
-          appId: "1:500677632460:web:236568f1cb93c31a7bbd69",
-          measurementId: "G-RWF1030VF1"
-        };
-
-        // 2. INITIALIZE FIREBASE
-        try {
-            firebase.initializeApp(firebaseConfig);
-            const db = firebase.firestore();
-            console.log("Firebase initialized successfully");
-
-            // --- VARIABLES ---
-            let myName = "";
-            let lobbyId = "";
-            let isHost = false;
-
-            // --- DOM ELEMENTS ---
-            const lobbyScreen = document.getElementById('lobby-screen');
-            const gameScreen = document.getElementById('game-screen');
-            const usernameInput = document.getElementById('username');
-            const joinCodeInput = document.getElementById('join-code');
-            const btnCreate = document.getElementById('btn-create');
-            const btnJoin = document.getElementById('btn-join');
-            const btnStart = document.getElementById('btn-start');
-            const btnSubmit = document.getElementById('btn-submit');
-
-            // --- INPUT HANDLING ---
-            const checkInputs = () => {
-                const name = usernameInput.value.trim();
-                const code = joinCodeInput.value.trim();
-                btnCreate.disabled = !name;
-                btnJoin.disabled = !(name && code.length === 4);
-            };
-            usernameInput.addEventListener('keyup', checkInputs);
-            joinCodeInput.addEventListener('keyup', checkInputs);
-
-            // --- CREATE LOBBY ---
-            btnCreate.addEventListener('click', async () => {
-                myName = usernameInput.value.trim();
-                lobbyId = Math.random().toString(36).substring(2, 6).toUpperCase();
-                isHost = true;
-
-                try {
-                    await db.collection('lobbies').doc(lobbyId).set({
-                        host: myName,
-                        status: 'waiting',
-                        players: [{ name: myName, role: 'Host' }],
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    enterGameUI();
-                } catch (error) {
-                    alert("ERROR CREATING: " + error.message + "\n\nCHECK YOUR FIREBASE CONSOLE RULES!");
-                }
-            });
-
-            // --- JOIN LOBBY ---
-            btnJoin.addEventListener('click', async () => {
-                myName = usernameInput.value.trim();
-                lobbyId = joinCodeInput.value.trim().toUpperCase();
-
-                try {
-                    const docRef = db.collection('lobbies').doc(lobbyId);
-                    
-                    // Transaction to safely add player
-                    await db.runTransaction(async (t) => {
-                        const doc = await t.get(docRef);
-                        if (!doc.exists) throw "Lobby not found!";
-                        const data = doc.data();
-                        if (data.status !== 'waiting') throw "Game already started!";
-                        
-                        const newPlayers = [...data.players, { name: myName, role: 'Player' }];
-                        t.update(docRef, { players: newPlayers });
-                    });
-                    enterGameUI();
-                } catch (error) {
-                    alert("ERROR JOINING: " + (error.message || error));
-                }
-            });
-
-            // --- UI SWITCHER & LISTENER ---
-            function enterGameUI() {
-                lobbyScreen.classList.remove('active');
-                gameScreen.classList.add('active');
-                document.getElementById('display-code').innerText = lobbyId;
-                
-                // START REALTIME LISTENER
-                db.collection('lobbies').doc(lobbyId).onSnapshot(doc => {
-                    if (!doc.exists) return alert("Lobby closed!");
-                    const data = doc.data();
-                    
-                    // Update Player List
-                    const list = document.getElementById('player-list');
-                    list.innerHTML = data.players.map(p => `<li>${p.name}</li>`).join('');
-
-                    // Update Status Log
-                    if(data.lastAction) document.getElementById('status-log').innerText = data.lastAction;
-
-                    // Host Controls
-                    if (isHost && data.status === 'waiting' && data.players.length >= 3) {
-                        btnStart.style.display = 'block';
-                    } else {
-                        btnStart.style.display = 'none';
-                    }
-
-                    // Game Started?
-                    if (data.status === 'playing') {
-                        const me = data.players.find(p => p.name === myName);
-                        if (me) {
-                            document.getElementById('role-text').innerText = (me.role === 'Imposter') ? "😈 YOU ARE THE IMPOSTER" : "😇 YOU ARE A CIVILIAN";
-                            document.getElementById('secret-word').innerText = "Secret: " + me.word;
-                            document.getElementById('input-container').style.display = 'block';
-                        }
-                    }
-                });
-            }
-
-            // --- START GAME (Host Only) ---
-            btnStart.addEventListener('click', async () => {
-                const words = ["Apple", "Banana", "Pizza", "Train"]; // Simplified list
-                const secret = words[Math.floor(Math.random() * words.length)];
-                
-                // Get current players to assign roles
-                const doc = await db.collection('lobbies').doc(lobbyId).get();
-                let players = doc.data().players;
-                
-                // Assign Imposter
-                const impIdx = Math.floor(Math.random() * players.length);
-                players = players.map((p, i) => ({
-                    ...p,
-                    role: (i === impIdx) ? 'Imposter' : 'Civilian',
-                    word: (i === impIdx) ? '???' : secret
-                }));
-
-                await db.collection('lobbies').doc(lobbyId).update({
-                    status: 'playing',
-                    players: players,
-                    lastAction: "Game Started! Check your roles."
-                });
-            });
-
-            // --- SUBMIT CLUE ---
-            btnSubmit.addEventListener('click', async () => {
-                const txt = document.getElementById('clue-input').value;
-                if(!txt) return;
-                
-                await db.collection('lobbies').doc(lobbyId).update({
-                    lastAction: myName + " says: " + txt
-                });
-                document.getElementById('clue-input').value = "";
-            });
-
-        } catch (e) {
-            alert("FATAL ERROR: Firebase failed to load. " + e);
-        }
-    </script>
+<div id="game">
+  <h2>Lobby Code: <span id="codeDisplay"></span></h2>
+  <h3>Players:</h3>
+  <ul id="playerList"></ul>
+</div>
 </body>
 </html>
