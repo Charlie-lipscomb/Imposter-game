@@ -16,7 +16,8 @@
   .row{display:flex;gap:8px}
   .col2{flex:1}
   .inline-btn{width:auto;padding:8px 12px}
-  #results{margin-top:12px;padding:10px;background:#22303f;border-radius:8px}
+  #results{margin-top:12px;padding:10px;background:#22303f;border-radius:8px;white-space:pre-wrap}
+  .selected{outline:2px solid #fff}
 </style>
 </head>
 <body>
@@ -78,7 +79,7 @@
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
-  getDatabase, ref, set, get, onValue, update, push, serverTimestamp
+  getDatabase, ref, set, get, onValue, update, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 const firebaseConfig = {
@@ -103,6 +104,8 @@ const roundsNeeded = 2; // two full rounds
 
 const el = id => document.getElementById(id);
 
+let votesListenerAttached = false;
+
 function renderPlayers(players){
   const list = el('playersList'); list.innerHTML = '';
   const keys = Object.keys(players || {});
@@ -124,7 +127,7 @@ function updateStartVisibility(hostId, players){
 // render clues list (everyone sees clues)
 function renderClues(clues = [], players = {}){
   const list = el('clueList'); list.innerHTML = '';
-  clues.forEach(c=>{
+  (clues || []).forEach(c=>{
     const div = document.createElement('div');
     div.className = 'clue-item';
     const name = players?.[c.player]?.name || 'Unknown';
@@ -134,7 +137,6 @@ function renderClues(clues = [], players = {}){
   });
 }
 
-// show turn UI and round counter and clue input visibility
 function updateTurnUI(lobby){
   const me = clientId;
   const players = lobby.players || {};
@@ -162,6 +164,26 @@ function updateTurnUI(lobby){
   }
 }
 
+// show final results for everyone if stored
+function showFinalResultsIfAny(data){
+  if(!data || !data.finalResults) return;
+  const fr = data.finalResults;
+  let html = '';
+  html += fr.text + '\n\n';
+  html += 'Roles: ' + (fr.roles || '') + '\n';
+  html += 'Word: ' + (fr.word || '—') + '\n';
+  if(fr.tally){
+    html += '\nVotes tally:\n';
+    Object.keys(fr.tally).forEach(k => {
+      const n = fr.tally[k];
+      const name = data.players?.[k]?.name || k;
+      html += `${name}: ${n}\n`;
+    });
+  }
+  el('results').textContent = ''; // clear first
+  el('results').innerText = html;
+}
+
 // start listening to lobby changes
 function listenLobby(lobbyCode){
   currentLobby = lobbyCode;
@@ -172,6 +194,8 @@ function listenLobby(lobbyCode){
     // update players list and start button visibility
     renderPlayers(data.players || {});
     updateStartVisibility(data.hostId, data.players || {});
+    // if final results exist show them (persisted)
+    showFinalResultsIfAny(data);
     // if game started, show game UI
     if(data.started){
       el('lobbyCard').style.display = 'none';
@@ -193,6 +217,9 @@ function listenLobby(lobbyCode){
       // if voting is active, render vote UI
       if(data.voting){
         renderVoteUI(data);
+      } else {
+        // hide vote UI if not voting
+        el('voteSection').style.display = 'none';
       }
       updateTurnUI(data);
     } else {
@@ -225,24 +252,28 @@ function renderVoteUI(lobby){
     };
     list.appendChild(btn);
   });
+  // enable submit button
+  el('submitVoteBtn').disabled = false;
 }
 
 // tally votes once all players voted
-async function watchVotesAndTally(){
-  if(!currentLobby) return;
+function watchVotesAndTally(){
+  if(votesListenerAttached) return;
+  votesListenerAttached = true;
+
   const votesRef = ref(db, 'lobbies/' + currentLobby + '/votes');
   onValue(votesRef, async snap=>{
     const votesObj = snap.val() || {};
-    const voteKeys = Object.keys(votesObj);
     // need number of players
     const lobbySnap = await get(ref(db, 'lobbies/' + currentLobby));
     const lobby = lobbySnap.val();
+    if(!lobby) return;
     const players = lobby?.players || {};
     const nPlayers = Object.keys(players).length;
-    if(voteKeys.length < nPlayers) return; // wait for everyone
+    if(Object.keys(votesObj).length < nPlayers) return; // wait for everyone
     // compute tally
     const tally = {};
-    voteKeys.forEach(voterId=>{
+    Object.keys(votesObj).forEach(voterId=>{
       const target = votesObj[voterId].vote;
       tally[target] = (tally[target] || 0) + 1;
     });
@@ -253,22 +284,27 @@ async function watchVotesAndTally(){
       else if(tally[target] === max){ winners.push(target); }
     }
     let resultText = '';
+    let ejectedId = null;
     if(winners.length !== 1){
       resultText = 'Tie. No one is ejected.';
     } else {
-      const ejectedId = winners[0];
+      ejectedId = winners[0];
       const ejectedName = players[ejectedId].name;
       const wasImposter = players[ejectedId].role === 'imposter';
       resultText = `Voted out: ${ejectedName}. They ${wasImposter ? 'were' : 'were not'} the imposter.`;
     }
-    el('results').textContent = resultText;
-    // show final word and roles
+    // prepare finalResults object (persist so everyone sees)
     const rolesText = Object.keys(players).map(pid=>{
       return `${players[pid].name}: ${players[pid].role}`;
     }).join('  |  ');
-    el('results').innerHTML += '<br><br>Roles: ' + rolesText + '<br>Word: ' + (lobby.word || '—');
-    // stop voting so UI won't re-trigger
-    await update(ref(db, 'lobbies/' + currentLobby), { voting: false, started: false });
+    const finalResults = {
+      text: resultText,
+      roles: rolesText,
+      word: lobby.word || '—',
+      tally: tally
+    };
+    // persist final results and clear voting flag (do not set started:false so UX can decide)
+    await update(ref(db, 'lobbies/' + currentLobby), { finalResults, voting: false });
   });
 }
 
@@ -316,12 +352,12 @@ async function startGame(){
   const players = lobby.players || {};
   const keys = Object.keys(players);
   if(keys.length < 3) return alert('Need at least 3 players to start');
-  // choose imposter index
+  // choose imposter randomly
   const imposter = keys[Math.floor(Math.random() * keys.length)];
   // choose word (you can customise or load packs)
   const words = ['apple','dog','sun','car','book','river','moon','castle','guitar','pizza'];
   const word = words[Math.floor(Math.random()*words.length)];
-  // create turn order = keys (randomise)
+  // create turn order = shuffled keys
   const shuffled = keys.slice().sort(()=>Math.random()-0.5);
   // set roles and initial lobby state
   const updates = {
@@ -335,32 +371,29 @@ async function startGame(){
   keys.forEach(k=>{
     updates['players/' + k + '/role'] = (k === imposter) ? 'imposter' : 'player';
   });
-  // clear any previous votes
+  // clear any previous votes and final results
   await update(ref(db, 'lobbies/' + currentLobby), updates);
-  // also ensure votes cleared
   await set(ref(db, 'lobbies/' + currentLobby + '/votes'), {});
+  await update(ref(db, 'lobbies/' + currentLobby), { finalResults: null });
 }
 
 el('createBtn').onclick = createLobby;
 el('joinBtn').onclick = joinLobby;
 el('startBtn').onclick = startGame;
 
-// submit clue: push to /clues and advance turn
+// submit clue: append to /clues and advance turn
 el('submitClueBtn').onclick = async () => {
   if(!currentLobby) return alert('No lobby');
   const text = el('clueInput').value.trim();
   if(!text) return alert('Enter a clue');
-  // push clue (everyone sees it)
   const clueRef = ref(db, 'lobbies/' + currentLobby + '/clues');
-  // get timestamp style stored in object
   const newClue = { player: clientId, text, ts: Date.now() };
-  // append to clues array safely by reading then updating (small scale ok)
   const snap = await get(clueRef);
   const arr = snap.val() || [];
   arr.push(newClue);
   await set(clueRef, arr);
   el('clueInput').value = '';
-  // advance turn index
+  // advance turn index and also update clues in lobby root for convenience
   const lobbyRef = ref(db, 'lobbies/' + currentLobby);
   const lobbySnap = await get(lobbyRef);
   const lobby = lobbySnap.val();
@@ -383,16 +416,24 @@ el('submitVoteBtn').onclick = async () => {
   el('submitVoteBtn').disabled = true;
 };
 
-// When lobby created or joined, start watching votes tally
-watchVotesAndTally();
-
-// auto rejoin if stored
-const saved = localStorage.getItem('imposter_lobby');
-if(saved){
-  currentLobby = saved;
-  listenLobby(saved);
-  watchVotesAndTally();
+// attach vote watcher once if lobby exists
+function ensureWatchVotes(){
+  if(!votesListenerAttached && currentLobby){
+    watchVotesAndTally();
+  }
 }
+window.addEventListener('load', ()=>{
+  // auto rejoin if stored
+  const saved = localStorage.getItem('imposter_lobby');
+  if(saved){
+    currentLobby = saved;
+    listenLobby(saved);
+    ensureWatchVotes();
+  }
+});
+
+// call watchVotesAndTally when lobby created/joined inside those functions already
+
 </script>
 </body>
 </html>
