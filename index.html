@@ -103,6 +103,7 @@ const roundsNeeded = 2;
 
 const el = id => document.getElementById(id);
 
+// render functions
 function renderPlayers(players){
   const list = el('playersList'); list.innerHTML = '';
   const keys = Object.keys(players || {});
@@ -160,105 +161,94 @@ function updateTurnUI(lobby){
   }
 }
 
-function listenLobby(lobbyCode){
-  currentLobby = lobbyCode;
-  const lobbyRef = ref(db, 'lobbies/' + lobbyCode);
-  onValue(lobbyRef, snap=>{
-    const data = snap.val();
-    if(!data) return;
-
-    renderPlayers(data.players || {});
-    updateStartVisibility(data.hostId, data.players || {});
-
-    if(data.started){
-      el('lobbyCard').style.display = 'none';
-      el('gameUI').style.display = 'block';
-      const role = data.players?.[clientId]?.role || 'Unknown';
-      el('roleDisplay').textContent = 'Your role: ' + role;
-      el('wordDisplay').textContent = 'Word: ' + (role === 'imposter' ? '???' : (data.word || '—'));
-      renderClues(data.clues || [], data.players || {});
-
-      const playersCount = Object.keys(data.players || {}).length || 0;
-      const totalClues = (data.clues || []).length;
-      if(!data.voting && playersCount>0 && totalClues >= roundsNeeded * playersCount){
-        update(ref(db, 'lobbies/' + currentLobby), { voting: true });
-        return;
-      }
-
-      if(data.voting) renderVoteUI(data);
-      updateTurnUI(data);
-    } else {
-      el('lobbyCard').style.display = 'block';
-      el('gameUI').style.display = 'none';
-      el('playersCard').style.display = 'block';
-      el('codeDisplay').textContent = lobbyCode;
-    }
-  });
-}
-
-// fetch random word from Firebase
+// pick random word from Firebase /words
 async function getRandomWord() {
   const snap = await get(ref(db, 'words'));
   const wordsObj = snap.val() || {};
   const wordsArr = Object.values(wordsObj);
   if(wordsArr.length === 0) return 'unknown';
-  const idx = Math.floor(Math.random() * wordsArr.length);
-  return wordsArr[idx];
+  return wordsArr[Math.floor(Math.random() * wordsArr.length)];
+}
+
+// create / join / start lobby
+async function createLobby(){
+  const name = el('name').value.trim();
+  if(!name) return alert('Enter your name');
+  const code = Math.random().toString(36).substring(2,8).toUpperCase();
+  currentLobby = code;
+  await set(ref(db, 'lobbies/' + code), { hostId: clientId, started: false, created: serverTimestamp() });
+  await set(ref(db, 'lobbies/' + code + '/players/' + clientId), { name, clientId });
+  el('playersCard').style.display = 'block';
+  el('codeDisplay').textContent = code;
+  listenLobby(code);
+}
+
+async function joinLobby(){
+  const name = el('name').value.trim();
+  const code = el('joinCode').value.trim().toUpperCase();
+  if(!name || !code) return alert('Enter name and code');
+  const snap = await get(ref(db, 'lobbies/' + code));
+  if(!snap.exists()) return alert('Lobby not found');
+  currentLobby = code;
+  await set(ref(db, 'lobbies/' + code + '/players/' + clientId), { name, clientId });
+  el('playersCard').style.display = 'block';
+  el('codeDisplay').textContent = code;
+  listenLobby(code);
 }
 
 async function startGame(){
+  if(!currentLobby) return;
   const snap = await get(ref(db, 'lobbies/' + currentLobby));
   const lobby = snap.val();
   const players = lobby.players || {};
   const keys = Object.keys(players);
   if(keys.length < 3) return alert('Need at least 3 players');
 
-  const imp = keys[Math.floor(Math.random()*keys.length)];
+  const imposter = keys[Math.floor(Math.random()*keys.length)];
   const word = await getRandomWord();
-  const order = keys.slice().sort(()=>Math.random()-0.5);
+  const turnOrder = keys.slice().sort(()=>Math.random()-0.5);
 
   const updates = {
     started: true,
     voting: false,
-    word: word,
-    turnOrder: order,
+    word,
+    turnOrder,
     currentTurn: 0,
     clues: []
   };
 
   keys.forEach(k=>{
-    updates['players/' + k + '/role'] = (k === imp) ? 'imposter' : 'player';
+    updates['players/' + k + '/role'] = (k === imposter) ? 'imposter' : 'player';
   });
 
   await update(ref(db, 'lobbies/' + currentLobby), updates);
   await set(ref(db, 'lobbies/' + currentLobby + '/votes'), {});
 }
 
-// start next round with new imposter and word
-async function startNextRound(){
-  const lobbySnap = await get(ref(db, 'lobbies/' + currentLobby));
-  const lobby = lobbySnap.val();
-  const players = lobby.players || {};
-  const keys = Object.keys(players);
+// event listeners
+el('createBtn').onclick = createLobby;
+el('joinBtn').onclick = joinLobby;
+el('startBtn').onclick = startGame;
 
-  const newImp = keys[Math.floor(Math.random()*keys.length)];
-  const newWord = await getRandomWord();
-
-  const newRoles = {};
-  keys.forEach(k=>{
-    newRoles['players/' + k + '/role'] = (k === newImp) ? 'imposter' : 'player';
-  });
-
-  await update(ref(db, 'lobbies/' + currentLobby), {
-    voting: false,
-    word: newWord,
-    currentTurn: 0,
-    clues: [],
-    ...newRoles
+// listen lobby
+function listenLobby(code){
+  currentLobby = code;
+  const lobbyRef = ref(db, 'lobbies/' + code);
+  onValue(lobbyRef, snap=>{
+    const data = snap.val();
+    if(!data) return;
+    renderPlayers(data.players || {});
+    updateStartVisibility(data.hostId, data.players || {});
+    el('lobbyCard').style.display = data.started ? 'none' : 'block';
+    el('gameUI').style.display = data.started ? 'block' : 'none';
+    if(data.started){
+      const role = data.players?.[clientId]?.role || 'Unknown';
+      el('roleDisplay').textContent = 'Your role: ' + role;
+      el('wordDisplay').textContent = 'Word: ' + (role === 'imposter' ? '???' : (data.word || '—'));
+      renderClues(data.clues || [], data.players || {});
+    }
   });
 }
-
-// rest of the code for create/join, submit clue, voting remains the same...
 </script>
 </body>
 </html>
