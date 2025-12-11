@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Imposter - Social Deduction Game</title>
     
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-firestore-compat.js"></script>
     
     <style>
         /* --- CSS STYLING (FOR SLEEK UI) --- */
@@ -220,7 +220,7 @@
         <div class="lobby-card">
             <h2>Join or Start a Game</h2>
             <input type="text" id="username-input" placeholder="Enter Your Name" maxlength="15">
-            <button id="create-lobby-btn" class="primary-btn">Create New Lobby</button>
+            <button id="create-lobby-btn" class="primary-btn" disabled>Create New Lobby</button>
             <div class="separator">OR</div>
             <input type="text" id="code-input" placeholder="Enter Lobby Code">
             <button id="join-lobby-btn" class="secondary-btn" disabled>Join Lobby</button>
@@ -260,6 +260,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             
             // --- 1. FIREBASE CONFIGURATION & INITIALIZATION ---
+            // NOTE: Using the 'compat' version above requires using the 'firebase.XXX()' global style.
             const firebaseConfig = {
               apiKey: "AIzaSyDlm1nd6P6VY6HiFLgy2rZPeLLr-VwYaD4",
               authDomain: "imposter-5142b.firebaseapp.com",
@@ -272,9 +273,8 @@
 
             // Initialize Firebase and Firestore
             const app = firebase.initializeApp(firebaseConfig);
+            // Firestore reference using the 'compat' style
             const db = firebase.firestore(); 
-
-            // Helper references for Firestore (using V9 style names for clarity)
             const lobbiesCollection = db.collection('lobbies');
             
             // --- DOM AND STATE VARIABLES ---
@@ -336,6 +336,7 @@
                     lobbyCode = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4-char code
                     
                     try {
+                        // Use firebase.firestore.FieldValue.serverTimestamp() with compat library
                         await lobbiesCollection.doc(lobbyCode).set({
                             host: myUsername,
                             status: 'waiting', 
@@ -347,7 +348,7 @@
                         joinGame(lobbyCode, myUsername, true); 
                     } catch (error) {
                         console.error("Error creating lobby:", error);
-                        alert("Failed to create lobby. Check console.");
+                        alert("Failed to create lobby. Check console and Firebase Security Rules.");
                     }
                 }
             });
@@ -387,7 +388,7 @@
 
                     } catch (error) {
                         console.error("Error joining lobby:", error);
-                        alert(`Failed to join lobby: ${error.message || error}`);
+                        alert(`Failed to join lobby: ${error.message || error}. Check console and Firebase Security Rules.`);
                     }
                 }
             });
@@ -403,7 +404,7 @@
                         // Update player list for ALL connected clients
                         updatePlayerList(data.players.map(p => p.name));
                         
-                        // Host visibility check
+                        // Host visibility check (can only start if 3+ players and still waiting)
                         if (data.host === myUsername && data.players.length >= 3 && data.status === 'waiting') {
                             startGameBtn.style.display = 'block';
                         } else {
@@ -497,6 +498,7 @@
                     
                     try {
                         const lobbyRef = lobbiesCollection.doc(lobbyCode);
+                        // Using 'firebase.firestore.FieldValue.arrayUnion' with the compat library
                         const newClue = { playerName: myUsername, clue: clue, timestamp: new Date().toISOString() };
                         
                         // Save the new clue and update the "lastClue" field for immediate feedback
