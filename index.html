@@ -1,50 +1,52 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Imposter — Lobby & Game</title>
-  <style>
-    body{font-family:sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-    .card{background:#1a1f2b;padding:20px;border-radius:12px;width:400px}
-    input,button{width:100%;padding:10px;margin:5px 0;border-radius:6px;border:none}
-    .btn-primary{background:#4a90e2;color:white}
-    .btn-success{background:#28a745;color:white}
-    #playersList div,#aliveList div{padding:6px;background:rgba(255,255,255,0.05);margin-bottom:4px;border-radius:6px}
-    #gameUI,#gameBoard{display:none}
-    button{cursor:pointer}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Imposter — Guess the Word</title>
+<style>
+body{font-family:sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+.card{background:#1a1f2b;padding:20px;border-radius:12px;width:500px;max-width:95%}
+input,button,textarea{width:100%;padding:10px;margin:5px 0;border-radius:6px;border:none}
+.btn-primary{background:#4a90e2;color:white}
+.btn-success{background:#28a745;color:white}
+.player-list div{padding:6px;background:rgba(255,255,255,0.05);margin-bottom:4px;border-radius:6px}
+#gameUI,#voteSection{display:none}
+</style>
 </head>
 <body>
-  <div class="card" id="lobbyCard">
-    <h2>Imposter Lobby</h2>
-    <input id="name" placeholder="Your name" />
-    <button id="createBtn" class="btn-primary">Create Lobby</button>
-    <input id="joinCode" placeholder="Lobby Code" />
-    <button id="joinBtn" class="btn-primary">Join Lobby</button>
+<div class="card" id="lobbyCard">
+<h2>Imposter — Guess the Word</h2>
+<input id="name" placeholder="Your name" />
+<button id="createBtn" class="btn-primary">Create Lobby</button>
+<input id="joinCode" placeholder="Lobby Code" />
+<button id="joinBtn" class="btn-primary">Join Lobby</button>
 
-    <div id="playersCard" style="display:none;margin-top:10px">
-      <div>Lobby Code: <span id="codeDisplay"></span></div>
-      <div>Players (<span id="playersCount">0</span>):</div>
-      <div id="playersList"></div>
-      <button id="startBtn" class="btn-success" style="display:none;margin-top:10px">Start Game</button>
-    </div>
-  </div>
+<div id="playersCard" style="display:none;margin-top:10px">
+<div>Lobby Code: <span id="codeDisplay"></span></div>
+<div>Players (<span id="playersCount">0</span>):</div>
+<div id="playersList" class="player-list"></div>
+<button id="startBtn" class="btn-success" style="display:none;margin-top:10px">Start Game</button>
+</div>
+</div>
 
-  <div id="gameUI" class="card">
-    <h2>Game in Progress</h2>
-    <p id="yourRole"></p>
-    <div id="gameBoard">
-      <h3>Alive Players</h3>
-      <div id="aliveList"></div>
-      <button id="callMeetingBtn">Call Meeting</button>
-      <div id="voteSection" style="display:none; margin-top:10px;">
-        <h4>Vote out a player</h4>
-        <div id="voteList"></div>
-        <button id="submitVoteBtn">Submit Vote</button>
-      </div>
-    </div>
-  </div>
+<div id="gameUI" class="card">
+<h2>Game In Progress</h2>
+<p id="roleDisplay"></p>
+<p id="wordDisplay"></p>
+<div id="clueSection">
+<h3>Enter your clue</h3>
+<textarea id="clueInput" placeholder="Type your clue"></textarea>
+<button id="submitClueBtn" class="btn-primary">Submit Clue</button>
+</div>
+<div id="turnInfo"></div>
+<div id="voteSection">
+<h3>Vote for the Imposter</h3>
+<div id="voteList"></div>
+<button id="submitVoteBtn" class="btn-success">Submit Vote</button>
+</div>
+<div id="results"></div>
+</div>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -58,58 +60,41 @@ let clientId = localStorage.getItem('imposter_clientId') || ('c_'+Math.random().
 localStorage.setItem('imposter_clientId', clientId);
 let currentLobby=null;
 const el=id=>document.getElementById(id);
-const gameUI=el('gameUI');
-const aliveList=el('aliveList');
-const callMeetingBtn=el('callMeetingBtn');
-const voteSection=el('voteSection');
-const voteList=el('voteList');
-const submitVoteBtn=el('submitVoteBtn');
 
 function updatePlayerList(code, hostId){
   const playersRef = ref(db,'lobbies/'+code+'/players');
-  onValue(playersRef, snap=>{
-    const list=el('playersList'); list.innerHTML='';
-    let count=0;
-    snap.forEach(child=>{
-      count++; const p=child.val();
-      const div=document.createElement('div'); div.textContent=p.name+(p.clientId===clientId?' (you)':'');
-      list.appendChild(div);
-    });
+  onValue(playersRef,snap=>{
+    const list=el('playersList'); list.innerHTML=''; let count=0;
+    snap.forEach(child=>{count++; const p=child.val(); const div=document.createElement('div'); div.textContent=p.name+(p.clientId===clientId?' (you)':''); list.appendChild(div);});
     el('playersCount').textContent=count;
     el('startBtn').style.display=(hostId===clientId && count>=3)?'block':'none';
   });
 }
 
-function listenGameStart(code){
+function listenGame(code){
   const lobbyRef = ref(db,'lobbies/'+code);
-  onValue(lobbyRef, snap=>{
-    const data=snap.val(); if(!data) return;
-    updateGameUI(data);
+  onValue(lobbyRef,snap=>{
+    const data = snap.val(); if(!data) return;
     if(data.started){
       el('lobbyCard').style.display='none';
-      gameUI.style.display='block';
+      el('gameUI').style.display='block';
+      const me=clientId;
+      const role=data.players[me]?.role||'Unknown';
+      el('roleDisplay').textContent='Your role: '+role;
+      el('wordDisplay').textContent='Word: '+(role==='imposter'?'???':data.word);
+      updateTurnInfo(data);
     }
   });
 }
 
-function updateGameUI(data){
-  const me=localStorage.getItem('imposter_playerId');
-  const role=data.players?.[me]?.role||'unknown';
-  el('yourRole').textContent='Your role: '+role;
-  aliveList.innerHTML='';
-  Object.entries(data.players).forEach(([id,p])=>{
-    if(p.alive){
-      const div=document.createElement('div');
-      div.textContent=p.name+(id===me?' (you)':'');
-      if(data.players[me].role==='imposter' && id!==me){
-        div.style.cursor='pointer';
-        div.onclick=async()=>{
-          await update(ref(db,'lobbies/'+currentLobby+'/players/'+id), {alive:false});
-        };
-      }
-      aliveList.appendChild(div);
-    }
-  });
+function updateTurnInfo(data){
+  const turnId = data.turnOrder[data.currentTurn];
+  const me=clientId;
+  if(turnId===me){
+    el('turnInfo').textContent='It is your turn!'; el('clueSection').style.display='block';
+  } else {
+    el('turnInfo').textContent='Waiting for '+data.players[turnId]?.name+' to give a clue.'; el('clueSection').style.display='none';
+  }
 }
 
 async function createLobby(){
@@ -117,36 +102,37 @@ async function createLobby(){
   const code=Math.random().toString(36).substring(2,8).toUpperCase();
   currentLobby=code;
   await set(ref(db,'lobbies/'+code),{hostId:clientId,started:false,created:serverTimestamp()});
-  await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId,alive:true,role:'unassigned',joined:serverTimestamp()});
+  await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId});
   localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
   el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
   updatePlayerList(code,clientId);
-  listenGameStart(code);
+  listenGame(code);
 }
 
 async function joinLobby(){
   const name=el('name').value.trim();
   const code=el('joinCode').value.trim().toUpperCase();
   if(!name||!code)return alert('Enter name and code');
-  const snap=await get(ref(db,'lobbies/'+code)); if(!snap.exists())return alert('Lobby not found');
+  const snap = await get(ref(db,'lobbies/'+code)); if(!snap.exists())return alert('Lobby not found');
   currentLobby=code;
-  await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId,alive:true,role:'unassigned',joined:serverTimestamp()});
+  await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId});
   localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
   el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
   updatePlayerList(code,snap.val().hostId);
-  listenGameStart(code);
+  listenGame(code);
 }
 
 async function startGame(){
   if(!currentLobby)return;
-  const lobbyRef=ref(db,'lobbies/'+currentLobby);
-  const snap=await get(lobbyRef); if(!snap.exists())return;
-  const players=snap.val().players||{};
-  const keys=Object.keys(players); if(keys.length<3) return alert('Need at least 3 players');
-  const impostersCount=Math.max(1,Math.floor(keys.length/4));
-  const shuffled=keys.sort(()=>Math.random()-0.5);
-  const updates={started:true};
-  shuffled.forEach((k,i)=>{updates['players/'+k+'/role']=i<impostersCount?'imposter':'crewmate'; updates['players/'+k+'/alive']=true;});
+  const lobbyRef = ref(db,'lobbies/'+currentLobby);
+  const snap = await get(lobbyRef); if(!snap.exists())return;
+  const players = snap.val().players||{};
+  const keys = Object.keys(players); if(keys.length<3) return alert('Need at least 3 players');
+  const imposterIndex = Math.floor(Math.random()*keys.length);
+  const wordList = ['apple','dog','sun','car','book'];
+  const word = wordList[Math.floor(Math.random()*wordList.length)];
+  const updates={started:true,word,turnOrder:keys,currentTurn:0};
+  keys.forEach((k,i)=>{updates['players/'+k+'/role']=(i===imposterIndex?'imposter':'player');});
   await update(lobbyRef,updates);
 }
 
@@ -154,32 +140,23 @@ el('createBtn').onclick=createLobby;
 el('joinBtn').onclick=joinLobby;
 el('startBtn').onclick=startGame;
 
-// Meetings
-callMeetingBtn.onclick=()=>{
-  voteSection.style.display='block';
-  voteList.innerHTML='';
-  const me=localStorage.getItem('imposter_playerId');
-  const playersRef=ref(db,'lobbies/'+currentLobby+'/players');
-  get(playersRef).then(snap=>{
-    snap.forEach(child=>{
-      const p=child.val(); if(p.alive && child.key!==me){
-        const btn=document.createElement('button'); btn.textContent=p.name;
-        btn.onclick=()=>voteList.setAttribute('data-vote',child.key);
-        voteList.appendChild(btn);
-      }
-    });
-  });
-};
+el('submitClueBtn').onclick=async()=>{
+  const clue=el('clueInput').value.trim(); if(!clue)return;
+  const lobbyRef = ref(db,'lobbies/'+currentLobby+'/clues');
+  const snap = await get(lobbyRef);
+  const currentClues = snap.val()||[];
+  currentClues.push({player:clientId,text:clue});
+  await set(lobbyRef,currentClues);
+  el('clueInput').value='';
 
-submitVoteBtn.onclick=async()=>{
-  const votedId=voteList.getAttribute('data-vote'); if(!votedId) return alert('Select a player');
-  await update(ref(db,'lobbies/'+currentLobby+'/players/'+votedId),{alive:false});
-  voteSection.style.display='none';
+  // advance turn
+  const lobbyMainRef = ref(db,'lobbies/'+currentLobby);
+  const dataSnap = await get(lobbyMainRef);
+  const data = dataSnap.val();
+  let next = data.currentTurn+1;
+  if(next>=data.turnOrder.length) next=0;
+  await update(lobbyMainRef,{currentTurn:next});
 };
-
-// Auto rejoin
-const savedLobby=localStorage.getItem('imposter_lobby');
-if(savedLobby) listenGameStart(savedLobby);
 </script>
 </body>
 </html>
