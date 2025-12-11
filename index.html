@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Imposter — Guess the Word</title>
 <style>
-body{font-family:sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-.card{background:#1a1f2b;padding:20px;border-radius:12px;width:500px;max-width:95%}
+body{font-family:sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
+.card{background:#1a1f2b;padding:20px;border-radius:12px;width:600px;max-width:95%}
 input,button,textarea{width:100%;padding:10px;margin:5px 0;border-radius:6px;border:none}
 .btn-primary{background:#4a90e2;color:white}
 .btn-success{background:#28a745;color:white}
 .player-list div{padding:6px;background:rgba(255,255,255,0.05);margin-bottom:4px;border-radius:6px}
 #gameUI,#voteSection{display:none}
+#clueList div{padding:8px;margin:5px 0;background:#2a3142;border-radius:6px}
 </style>
 </head>
 <body>
@@ -34,16 +35,19 @@ input,button,textarea{width:100%;padding:10px;margin:5px 0;border-radius:6px;bor
 <h2>Game In Progress</h2>
 <p id="roleDisplay"></p>
 <p id="wordDisplay"></p>
+<h3>Clues</h3>
+<div id="clueList"></div>
 <div id="clueSection">
-<h3>Enter your clue</h3>
+<h3>Your turn to give a clue</h3>
 <textarea id="clueInput" placeholder="Type your clue"></textarea>
-<button id="submitClueBtn" class="btn-primary">Submit Clue</button>
+<button id="submitClueBtn" class="btn-primary">Submit clue</button>
 </div>
 <div id="turnInfo"></div>
+
 <div id="voteSection">
 <h3>Vote for the Imposter</h3>
 <div id="voteList"></div>
-<button id="submitVoteBtn" class="btn-success">Submit Vote</button>
+<button id="submitVoteBtn" class="btn-success">Submit vote</button>
 </div>
 <div id="results"></div>
 </div>
@@ -71,17 +75,37 @@ function updatePlayerList(code, hostId){
   });
 }
 
+function renderClues(clues, players){
+  const list = el('clueList'); list.innerHTML='';
+  clues.forEach(c=>{
+    const div=document.createElement('div');
+    const name = players[c.player]?.name || 'Unknown';
+    div.textContent = name+': '+c.text;
+    list.appendChild(div);
+  });
+}
+
 function listenGame(code){
   const lobbyRef = ref(db,'lobbies/'+code);
   onValue(lobbyRef,snap=>{
-    const data = snap.val(); if(!data) return;
+    const data=snap.val(); if(!data)return;
+
     if(data.started){
       el('lobbyCard').style.display='none';
       el('gameUI').style.display='block';
+
       const me=clientId;
-      const role=data.players[me]?.role||'Unknown';
+      const role=data.players[me]?.role;
       el('roleDisplay').textContent='Your role: '+role;
       el('wordDisplay').textContent='Word: '+(role==='imposter'?'???':data.word);
+
+      if(data.clues) renderClues(data.clues, data.players);
+
+      if(data.voting){
+        showVoting(data);
+        return;
+      }
+
       updateTurnInfo(data);
     }
   });
@@ -90,20 +114,68 @@ function listenGame(code){
 function updateTurnInfo(data){
   const turnId = data.turnOrder[data.currentTurn];
   const me=clientId;
+
+  const totalClues = data.clues ? data.clues.length : 0;
+  const round = Math.floor(totalClues / data.turnOrder.length);
+
+  if(round>=2){
+    startVoting(data);
+    return;
+  }
+
   if(turnId===me){
-    el('turnInfo').textContent='It is your turn!'; el('clueSection').style.display='block';
+    el('turnInfo').textContent='It is your turn.';
+    el('clueSection').style.display='block';
   } else {
-    el('turnInfo').textContent='Waiting for '+data.players[turnId]?.name+' to give a clue.'; el('clueSection').style.display='none';
+    el('turnInfo').textContent='Waiting for '+data.players[turnId].name;
+    el('clueSection').style.display='none';
   }
 }
 
+async function startVoting(data){
+  await update(ref(db,'lobbies/'+currentLobby),{voting:true});
+}
+
+function showVoting(data){
+  el('clueSection').style.display='none';
+  el('voteSection').style.display='block';
+  const list = el('voteList'); list.innerHTML='';
+
+  Object.keys(data.players).forEach(id=>{
+    const btn=document.createElement('button');
+    btn.textContent=data.players[id].name;
+    btn.style.margin='5px 0';
+    btn.onclick=()=>{
+      el('submitVoteBtn').dataset.vote=id;
+    };
+    list.appendChild(btn);
+  });
+}
+
+el('submitVoteBtn').onclick=async()=>{
+  const choice = el('submitVoteBtn').dataset.vote;
+  if(!choice)return alert('Select someone');
+  await update(ref(db,'lobbies/'+currentLobby+'/votes/'+clientId),{vote:choice});
+
+  const snap = await get(ref(db,'lobbies/'+currentLobby));
+  const data=snap.val();
+  const votes=Object.values(data.votes||{});
+  if(votes.length===Object.keys(data.players).length){
+    const tally={}; votes.forEach(v=>{tally[v.vote]=(tally[v.vote]||0)+1;});
+    let max=0,winner=null;
+    for(const k in tally){if(tally[k]>max){max=tally[k]; winner=k;}}
+    const wasImposter = data.players[winner].role==='imposter';
+    el('results').textContent = 'Voted out: '+data.players[winner].name+' | Imposter was '+(wasImposter?'caught':'not caught');
+  }
+};
+
 async function createLobby(){
-  const name=el('name').value.trim(); if(!name)return alert('Enter name');
+  const name=el('name').value.trim();
+  if(!name)return alert('Enter name');
   const code=Math.random().toString(36).substring(2,8).toUpperCase();
   currentLobby=code;
   await set(ref(db,'lobbies/'+code),{hostId:clientId,started:false,created:serverTimestamp()});
   await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId});
-  localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
   el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
   updatePlayerList(code,clientId);
   listenGame(code);
@@ -113,27 +185,28 @@ async function joinLobby(){
   const name=el('name').value.trim();
   const code=el('joinCode').value.trim().toUpperCase();
   if(!name||!code)return alert('Enter name and code');
-  const snap = await get(ref(db,'lobbies/'+code)); if(!snap.exists())return alert('Lobby not found');
+  const snap=await get(ref(db,'lobbies/'+code)); if(!snap.exists())return alert('Lobby not found');
   currentLobby=code;
   await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId});
-  localStorage.setItem('imposter_lobby',code); localStorage.setItem('imposter_playerId',clientId);
   el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
   updatePlayerList(code,snap.val().hostId);
   listenGame(code);
 }
 
 async function startGame(){
-  if(!currentLobby)return;
-  const lobbyRef = ref(db,'lobbies/'+currentLobby);
-  const snap = await get(lobbyRef); if(!snap.exists())return;
-  const players = snap.val().players||{};
-  const keys = Object.keys(players); if(keys.length<3) return alert('Need at least 3 players');
-  const imposterIndex = Math.floor(Math.random()*keys.length);
-  const wordList = ['apple','dog','sun','car','book'];
-  const word = wordList[Math.floor(Math.random()*wordList.length)];
-  const updates={started:true,word,turnOrder:keys,currentTurn:0};
-  keys.forEach((k,i)=>{updates['players/'+k+'/role']=(i===imposterIndex?'imposter':'player');});
-  await update(lobbyRef,updates);
+  const snap = await get(ref(db,'lobbies/'+currentLobby)); if(!snap.exists())return;
+  const players=snap.val().players;
+  const keys=Object.keys(players);
+  if(keys.length<3)return alert('Need 3 players');
+
+  const imposter=keys[Math.floor(Math.random()*keys.length)];
+  const words=['apple','dog','sun','car','book'];
+  const word=words[Math.floor(Math.random()*words.length)];
+
+  const updates={started:true,word,turnOrder:keys,currentTurn:0,clues:[]};
+  keys.forEach(k=>{updates['players/'+k+'/role']=k===imposter?'imposter':'player';});
+
+  await update(ref(db,'lobbies/'+currentLobby),updates);
 }
 
 el('createBtn').onclick=createLobby;
@@ -142,20 +215,14 @@ el('startBtn').onclick=startGame;
 
 el('submitClueBtn').onclick=async()=>{
   const clue=el('clueInput').value.trim(); if(!clue)return;
-  const lobbyRef = ref(db,'lobbies/'+currentLobby+'/clues');
-  const snap = await get(lobbyRef);
-  const currentClues = snap.val()||[];
-  currentClues.push({player:clientId,text:clue});
-  await set(lobbyRef,currentClues);
+  const lobbyRef = ref(db,'lobbies/'+currentLobby);
+  const snap=await get(lobbyRef); const data=snap.val();
+  const clues=data.clues||[]; clues.push({player:clientId,text:clue});
+  await update(lobbyRef,{clues});
   el('clueInput').value='';
-
-  // advance turn
-  const lobbyMainRef = ref(db,'lobbies/'+currentLobby);
-  const dataSnap = await get(lobbyMainRef);
-  const data = dataSnap.val();
-  let next = data.currentTurn+1;
-  if(next>=data.turnOrder.length) next=0;
-  await update(lobbyMainRef,{currentTurn:next});
+  let next=data.currentTurn+1;
+  if(next>=data.turnOrder.length)next=0;
+  await update(lobbyRef,{currentTurn:next});
 };
 </script>
 </body>
