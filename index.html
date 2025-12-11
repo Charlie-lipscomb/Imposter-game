@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Imposter - Social Deduction Game</title>
     
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+    
     <style>
         /* --- CSS STYLING (FOR SLEEK UI) --- */
         :root {
@@ -150,9 +153,15 @@
             margin-bottom: 20px;
         }
 
+        .game-header p {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+            color: #bdc3c7;
+        }
+        
         #role-display {
             color: var(--primary-color);
-            margin: 20px 0;
+            margin: 15px 0 25px 0;
             font-size: 1.5em;
             text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
         }
@@ -216,7 +225,7 @@
             <input type="text" id="code-input" placeholder="Enter Lobby Code">
             <button id="join-lobby-btn" class="secondary-btn" disabled>Join Lobby</button>
         </div>
-        <p class="footer-note">A word game of secrets and suspicion.</p>
+        <p class="footer-note">A word game of secrets and suspicion. Requires Firebase connection.</p>
     </div>
 
     <div id="game-screen" class="screen">
@@ -227,7 +236,7 @@
 
         <div class="game-area">
             <div class="clue-box">
-                <p id="word-display" class="secret-word"></p>
+                <p id="word-display" class="secret-word">Waiting for game start...</p>
                 <div id="status-message">Waiting for all players...</div>
                 <div id="input-area" style="display: none;">
                     <input type="text" id="clue-input" placeholder="Your one-word clue" maxlength="20">
@@ -242,13 +251,33 @@
             </div>
         </div>
         
-        <button id="start-game-btn" class="primary-btn" style="display: none;">Start Game</button>
+        <button id="start-game-btn" class="primary-btn" style="display: none;">Start Game (Min 3 Players)</button>
         <button id="vote-btn" class="secondary-btn" style="display: none;">Start Voting</button>
     </div>
 
     <script>
-        /* --- JAVASCRIPT LOGIC (CLIENT-SIDE SIMULATION) --- */
+        /* --- JAVASCRIPT LOGIC (CLIENT-SIDE IMPLEMENTATION WITH FIREBASE) --- */
         document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- 1. FIREBASE CONFIGURATION & INITIALIZATION ---
+            const firebaseConfig = {
+              apiKey: "AIzaSyDlm1nd6P6VY6HiFLgy2rZPeLLr-VwYaD4",
+              authDomain: "imposter-5142b.firebaseapp.com",
+              projectId: "imposter-5142b",
+              storageBucket: "imposter-5142b.firebasestorage.app",
+              messagingSenderId: "500677632460",
+              appId: "1:500677632460:web:236568f1cb93c31a7bbd69",
+              measurementId: "G-RWF1030VF1"
+            };
+
+            // Initialize Firebase and Firestore
+            const app = firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore(); 
+
+            // Helper references for Firestore (using V9 style names for clarity)
+            const lobbiesCollection = db.collection('lobbies');
+            
+            // --- DOM AND STATE VARIABLES ---
             const lobbyScreen = document.getElementById('lobby-screen');
             const gameScreen = document.getElementById('game-screen');
             const usernameInput = document.getElementById('username-input');
@@ -256,70 +285,30 @@
             const joinLobbyBtn = document.getElementById('join-lobby-btn');
             const createLobbyBtn = document.getElementById('create-lobby-btn');
             const startGameBtn = document.getElementById('start-game-btn');
-            
-            // Game State Variables (Client-side placeholders for a real server)
+            const wordDisplay = document.getElementById('word-display');
+            const roleDisplay = document.getElementById('role-display');
+            const statusMessage = document.getElementById('status-message');
+            const inputArea = document.getElementById('input-area');
+            const submitClueBtn = document.getElementById('submit-clue-btn');
+            const clueInput = document.getElementById('clue-input');
+
             let myUsername = '';
             let lobbyCode = '';
-            let myRole = '';
-            
-            // --- LOBBY SCREEN LOGIC ---
-            
+            let isHost = false; 
+
+            // --- UI HELPERS ---
+
             // Enable/Disable buttons based on input content
             const checkInputs = () => {
                 const hasUsername = usernameInput.value.trim().length > 0;
                 const hasCode = codeInput.value.trim().length > 0;
-                // Join needs both name and code
                 joinLobbyBtn.disabled = !(hasUsername && hasCode); 
-                // Create needs only a name
                 createLobbyBtn.disabled = !hasUsername;
             };
 
             usernameInput.addEventListener('input', checkInputs);
             codeInput.addEventListener('input', checkInputs);
-            
-            // Function to handle creating a lobby (Simulated)
-            createLobbyBtn.addEventListener('click', () => {
-                myUsername = usernameInput.value.trim();
-                if (myUsername) {
-                    // --- This is where REAL server communication would happen ---
-                    // Simulation:
-                    lobbyCode = 'ABCD'; 
-                    myRole = 'Host';
-                    joinGame(lobbyCode, myRole, myUsername, true); 
-                }
-            });
 
-            // Function to handle joining a lobby (Simulated)
-            joinLobbyBtn.addEventListener('click', () => {
-                myUsername = usernameInput.value.trim();
-                lobbyCode = codeInput.value.trim().toUpperCase();
-                if (myUsername && lobbyCode) {
-                    // --- This is where REAL server communication would happen ---
-                    // Simulation:
-                    myRole = 'Player'; 
-                    joinGame(lobbyCode, myRole, myUsername, false); 
-                }
-            });
-            
-            // --- GAME SCREEN INITIALIZATION ---
-            
-            function joinGame(code, role, username, isHost) {
-                // Toggle screens
-                lobbyScreen.classList.remove('active');
-                gameScreen.classList.add('active');
-
-                document.getElementById('display-code').textContent = code;
-                document.getElementById('role-display').textContent = `Welcome, ${username}! (Current Role: ${role})`;
-                
-                // Only the Host sees the Start Game button
-                if (isHost) {
-                    startGameBtn.style.display = 'block';
-                }
-
-                // Add self and simulated others to the player list
-                updatePlayerList([username, 'AgentSmith', 'Neo', 'Trinity']); 
-            }
-            
             function updatePlayerList(players) {
                 const list = document.getElementById('player-list');
                 list.innerHTML = '';
@@ -330,54 +319,199 @@
                 });
             }
 
-            // --- GAMEPLAY LOGIC (Conceptual/Simulated) ---
+            function joinGame(code, username, hostStatus) {
+                isHost = hostStatus;
+                lobbyScreen.classList.remove('active');
+                gameScreen.classList.add('active');
+                document.getElementById('display-code').textContent = code;
+                roleDisplay.textContent = `Welcome, ${username}! Waiting for game start...`;
+            }
 
-            // Host starting the game
-            startGameBtn.addEventListener('click', () => {
-                // --- This is where the server assigns roles and words ---
-                
-                // Client-side simulation of game start:
-                const secretWord = 'Guitar'; // For Civilians
-                const imposterWord = 'Harp'; // For Imposter (a similar, related word)
-                
-                // Simulate role assignment (based on username for testing)
-                const isImposter = (myUsername.toLowerCase() === 'neosim'); // Example logic: Neo is the imposter
-                const wordToDisplay = isImposter ? imposterWord : secretWord;
-                
-                document.getElementById('role-display').innerHTML = isImposter ? 
-                    '🚨 **YOU ARE THE IMPOSTER!** 🚨' : 
-                    '✅ **YOU ARE A CIVILIAN**';
-                    
-                document.getElementById('word-display').textContent = `Secret Word: ${wordToDisplay}`;
-                document.getElementById('status-message').textContent = "Give your one-word clue now!";
-                document.getElementById('input-area').style.display = 'flex';
-                startGameBtn.style.display = 'none';
-
-                startClueRound();
-            });
+            // --- 2. FIREBASE-CONNECTED LOBBY LOGIC ---
             
-            function startClueRound() {
-                const submitBtn = document.getElementById('submit-clue-btn');
-                const clueInput = document.getElementById('clue-input');
-                
-                submitBtn.addEventListener('click', () => {
-                    const clue = clueInput.value.trim();
-                    if (clue) {
-                        // --- This is where the server manages turn order and broadcasts clues ---
-                        
-                        alert(`Clue submitted: ${clue}. Waiting for others... (This is a simulation)`);
-                        
-                        // Display the submitted clue to the user (simulation)
-                        document.getElementById('status-message').innerHTML = `**${myUsername}** submitted: *"${clue}"*. Waiting for next action...`;
-                        
-                        clueInput.value = '';
-                        submitBtn.disabled = true; // Prevent spamming
-                        
-                        // After all players submit, the server would enable voting:
-                        // document.getElementById('vote-btn').style.display = 'block'; 
+            // Updated Create Lobby Logic
+            createLobbyBtn.addEventListener('click', async () => {
+                myUsername = usernameInput.value.trim();
+                if (myUsername) {
+                    lobbyCode = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4-char code
+                    
+                    try {
+                        await lobbiesCollection.doc(lobbyCode).set({
+                            host: myUsername,
+                            status: 'waiting', 
+                            players: [{ name: myUsername, role: 'Host', status: 'connected' }],
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+
+                        startLobbyListener(lobbyCode);
+                        joinGame(lobbyCode, myUsername, true); 
+                    } catch (error) {
+                        console.error("Error creating lobby:", error);
+                        alert("Failed to create lobby. Check console.");
                     }
+                }
+            });
+
+            // Updated Join Lobby Logic
+            joinLobbyBtn.addEventListener('click', async () => {
+                myUsername = usernameInput.value.trim();
+                lobbyCode = codeInput.value.trim().toUpperCase();
+                
+                if (myUsername && lobbyCode) {
+                    try {
+                        const lobbyRef = lobbiesCollection.doc(lobbyCode);
+                        
+                        await db.runTransaction(async (transaction) => {
+                            const lobbyDoc = await transaction.get(lobbyRef);
+
+                            if (!lobbyDoc.exists) {
+                                throw new Error("Lobby does not exist.");
+                            }
+                            
+                            const lobbyData = lobbyDoc.data();
+                            if (lobbyData.status !== 'waiting') {
+                                 throw new Error("Game is already in progress.");
+                            }
+                            if (lobbyData.players.find(p => p.name === myUsername)) {
+                                 throw new Error("A player with this name is already in the lobby.");
+                            }
+
+                            const newPlayer = { name: myUsername, role: 'Player', status: 'connected' };
+                            const updatedPlayers = [...lobbyData.players, newPlayer];
+
+                            transaction.update(lobbyRef, { players: updatedPlayers });
+                        });
+
+                        startLobbyListener(lobbyCode);
+                        joinGame(lobbyCode, myUsername, false); 
+
+                    } catch (error) {
+                        console.error("Error joining lobby:", error);
+                        alert(`Failed to join lobby: ${error.message || error}`);
+                    }
+                }
+            });
+
+            // --- 3. REAL-TIME SYNCHRONIZATION (LISTENER) ---
+
+            function startLobbyListener(code) {
+                // Listens for real-time changes to the lobby document
+                lobbiesCollection.doc(code).onSnapshot((doc) => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        
+                        // Update player list for ALL connected clients
+                        updatePlayerList(data.players.map(p => p.name));
+                        
+                        // Host visibility check
+                        if (data.host === myUsername && data.players.length >= 3 && data.status === 'waiting') {
+                            startGameBtn.style.display = 'block';
+                        } else {
+                            startGameBtn.style.display = 'none';
+                        }
+                        
+                        // Game in Progress Logic (triggers for all players)
+                        if (data.status === 'in-game') {
+                            const me = data.players.find(p => p.name === myUsername);
+                            
+                            if (me) {
+                                roleDisplay.innerHTML = (me.role === 'Imposter') ? 
+                                    '🚨 **YOU ARE THE IMPOSTER!** 🚨' : 
+                                    '✅ **YOU ARE A CIVILIAN**';
+                                wordDisplay.textContent = `Secret Word: ${me.word}`;
+                                statusMessage.textContent = "Give your one-word clue now!";
+                                inputArea.style.display = 'flex';
+                                
+                                // Reset clue button state on start of a new round
+                                submitClueBtn.disabled = false;
+                            }
+                        }
+                        
+                        // Handle Clue Submission updates (simple real-time log)
+                        if (data.lastClue) {
+                            statusMessage.innerHTML = `**${data.lastClue.playerName}** submitted: *"${data.lastClue.clue}"*. Waiting for next...`;
+                        }
+
+                    } else {
+                        // Lobby document was deleted
+                        alert("The lobby was closed or deleted.");
+                        window.location.reload(); 
+                    }
+                }, (error) => {
+                    console.error("Listener error:", error);
+                    alert("A real-time connection error occurred. Check Firebase rules/connection.");
                 });
             }
+
+            // --- 4. GAME START (HOST ACTION) & CLUES ---
+            startGameBtn.addEventListener('click', async () => {
+                if (!isHost) return; // Safety check
+                
+                try {
+                    const lobbyDoc = await lobbiesCollection.doc(lobbyCode).get();
+                    const players = lobbyDoc.data().players;
+                    
+                    if (players.length < 3) {
+                         alert("Need at least 3 players to start!");
+                         return;
+                    }
+
+                    // Simple Word List & Assignment (Host-side logic)
+                    const civilianWords = ['PYRAMID', 'ZEBRA', 'PIZZA', 'SUNFLOWER'];
+                    const imposterWords = ['SPHINX', 'STRIPE', 'BURGER', 'DAISY'];
+                    
+                    const wordIndex = Math.floor(Math.random() * civilianWords.length);
+                    const secretWord = civilianWords[wordIndex];
+                    const similarWord = imposterWords[wordIndex]; 
+                    
+                    const imposterIndex = Math.floor(Math.random() * players.length);
+                    
+                    const updatedPlayers = players.map((p, index) => ({
+                        ...p,
+                        role: (index === imposterIndex) ? 'Imposter' : 'Civilian',
+                        word: (index === imposterIndex) ? similarWord : secretWord
+                    }));
+
+                    // Update Firestore: this triggers the 'in-game' logic on all devices via the listener
+                    await lobbiesCollection.doc(lobbyCode).update({
+                        status: 'in-game',
+                        players: updatedPlayers,
+                        round: 1,
+                        clues: []
+                    });
+                    
+                    startGameBtn.style.display = 'none'; // Hide button after start
+
+                } catch (error) {
+                    console.error("Error starting game:", error);
+                    alert("Failed to start game. Check console/Firebase setup.");
+                }
+            });
+            
+            // Clue Submission Logic
+            submitClueBtn.addEventListener('click', async () => {
+                const clue = clueInput.value.trim();
+                if (clue) {
+                    submitClueBtn.disabled = true;
+                    clueInput.value = '';
+                    
+                    try {
+                        const lobbyRef = lobbiesCollection.doc(lobbyCode);
+                        const newClue = { playerName: myUsername, clue: clue, timestamp: new Date().toISOString() };
+                        
+                        // Save the new clue and update the "lastClue" field for immediate feedback
+                        await lobbyRef.update({
+                            clues: firebase.firestore.FieldValue.arrayUnion(newClue),
+                            lastClue: newClue 
+                        });
+                        
+                    } catch (error) {
+                        console.error("Error submitting clue:", error);
+                        submitClueBtn.disabled = false; // Re-enable if submission fails
+                        alert("Failed to submit clue.");
+                    }
+                }
+            });
 
             // Initial check to set button state on load
             checkInputs();
