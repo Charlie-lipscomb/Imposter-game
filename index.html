@@ -5,225 +5,394 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Imposter — Guess the Word</title>
 <style>
-body{font-family:sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
-.card{background:#1a1f2b;padding:20px;border-radius:12px;width:600px;max-width:95%}
-input,button,textarea{width:100%;padding:10px;margin:5px 0;border-radius:6px;border:none}
-.btn-primary{background:#4a90e2;color:white}
-.btn-success{background:#28a745;color:white}
-.player-list div{padding:6px;background:rgba(255,255,255,0.05);margin-bottom:4px;border-radius:6px}
-#gameUI,#voteSection{display:none}
-#clueList div{padding:8px;margin:5px 0;background:#2a3142;border-radius:6px}
+  body{font-family:Arial,Helvetica,sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
+  .card{background:#1a1f2b;padding:18px;border-radius:12px;width:680px;max-width:96%}
+  input,button,textarea{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:none;box-sizing:border-box}
+  .btn-primary{background:#4a90e2;color:white}
+  .btn-success{background:#28a745;color:white}
+  .player-list div,.clue-item{padding:8px;background:rgba(255,255,255,0.03);margin-bottom:6px;border-radius:6px}
+  #gameUI,#voteSection{display:none}
+  .small{font-size:13px;color:#9aa7b7}
+  .row{display:flex;gap:8px}
+  .col2{flex:1}
+  .inline-btn{width:auto;padding:8px 12px}
+  #results{margin-top:12px;padding:10px;background:#22303f;border-radius:8px}
 </style>
 </head>
 <body>
-<div class="card" id="lobbyCard">
-<h2>Imposter — Guess the Word</h2>
-<input id="name" placeholder="Your name" />
-<button id="createBtn" class="btn-primary">Create Lobby</button>
-<input id="joinCode" placeholder="Lobby Code" />
-<button id="joinBtn" class="btn-primary">Join Lobby</button>
+  <div class="card" id="lobbyCard">
+    <h2>Imposter — Guess the Word</h2>
 
-<div id="playersCard" style="display:none;margin-top:10px">
-<div>Lobby Code: <span id="codeDisplay"></span></div>
-<div>Players (<span id="playersCount">0</span>):</div>
-<div id="playersList" class="player-list"></div>
-<button id="startBtn" class="btn-success" style="display:none;margin-top:10px">Start Game</button>
-</div>
-</div>
+    <label class="small">Your name</label>
+    <input id="name" placeholder="Your name" />
 
-<div id="gameUI" class="card">
-<h2>Game In Progress</h2>
-<p id="roleDisplay"></p>
-<p id="wordDisplay"></p>
-<h3>Clues</h3>
-<div id="clueList"></div>
-<div id="clueSection">
-<h3>Your turn to give a clue</h3>
-<textarea id="clueInput" placeholder="Type your clue"></textarea>
-<button id="submitClueBtn" class="btn-primary">Submit clue</button>
-</div>
-<div id="turnInfo"></div>
+    <div class="row">
+      <button id="createBtn" class="btn-primary inline-btn">Create Lobby</button>
+      <input id="joinCode" placeholder="Lobby Code" class="col2" />
+      <button id="joinBtn" class="btn-primary inline-btn">Join</button>
+    </div>
 
-<div id="voteSection">
-<h3>Vote for the Imposter</h3>
-<div id="voteList"></div>
-<button id="submitVoteBtn" class="btn-success">Submit vote</button>
-</div>
-<div id="results"></div>
-</div>
+    <div id="playersCard" style="display:none;margin-top:12px">
+      <div class="row" style="align-items:center;justify-content:space-between">
+        <div>Lobby Code: <strong id="codeDisplay">—</strong></div>
+        <div class="small">Players: <span id="playersCount">0</span></div>
+      </div>
+
+      <div id="playersList" class="player-list" style="margin-top:8px"></div>
+      <div style="margin-top:10px">
+        <button id="startBtn" class="btn-success" style="display:none">Start Game</button>
+      </div>
+      <div class="small" style="margin-top:8px">Host can start the game once there are at least 3 players</div>
+    </div>
+  </div>
+
+  <!-- Game UI -->
+  <div class="card" id="gameUI">
+    <h2>Game In Progress</h2>
+    <div class="small" id="roleDisplay">Role: —</div>
+    <div class="small" id="wordDisplay" style="margin-bottom:8px">Word: —</div>
+
+    <h3>Clues (everyone sees them)</h3>
+    <div id="clueList" style="max-height:200px;overflow:auto;margin-bottom:8px"></div>
+
+    <div id="turnArea" style="margin-top:8px">
+      <div id="turnInfo" class="small" style="margin-bottom:6px">Turn info</div>
+      <div id="clueSection">
+        <textarea id="clueInput" placeholder="Write a short clue (no full word)"></textarea>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="submitClueBtn" class="btn-primary inline-btn">Submit clue</button>
+          <div class="small">Rounds: <span id="roundCounter">0</span> / 2</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="voteSection" style="margin-top:12px">
+      <h3>Vote for the Imposter</h3>
+      <div id="voteList" style="margin-bottom:8px"></div>
+      <button id="submitVoteBtn" class="btn-success">Submit Vote</button>
+    </div>
+
+    <div id="results"></div>
+  </div>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, set, get, onValue, update, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import {
+  getDatabase, ref, set, get, onValue, update, push, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
-const firebaseConfig = {apiKey:"AIzaSyDlm1nd6P6VY6HiFLgy2rZPeLLr-VwYaD4",authDomain:"imposter-5142b.firebaseapp.com",databaseURL:"https://imposter-5142b-default-rtdb.europe-west1.firebasedatabase.app",projectId:"imposter-5142b",storageBucket:"imposter-5142b.appspot.com",messagingSenderId:"500677632460",appId:"1:500677632460:web:236568f1cb93c31a7bbd69",measurementId:"G-RWF1030VF1"};
+const firebaseConfig = {
+  apiKey: "AIzaSyDlm1nd6P6VY6HiFLgy2rZPeLLr-VwYaD4",
+  authDomain: "imposter-5142b.firebaseapp.com",
+  databaseURL: "https://imposter-5142b-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "imposter-5142b",
+  storageBucket: "imposter-5142b.appspot.com",
+  messagingSenderId: "500677632460",
+  appId: "1:500677632460:web:236568f1cb93c31a7bbd69",
+  measurementId: "G-RWF1030VF1"
+};
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 let clientId = localStorage.getItem('imposter_clientId') || ('c_'+Math.random().toString(36).slice(2,10));
 localStorage.setItem('imposter_clientId', clientId);
-let currentLobby=null;
-const el=id=>document.getElementById(id);
 
-function updatePlayerList(code, hostId){
-  const playersRef = ref(db,'lobbies/'+code+'/players');
-  onValue(playersRef,snap=>{
-    const list=el('playersList'); list.innerHTML=''; let count=0;
-    snap.forEach(child=>{count++; const p=child.val(); const div=document.createElement('div'); div.textContent=p.name+(p.clientId===clientId?' (you)':''); list.appendChild(div);});
-    el('playersCount').textContent=count;
-    el('startBtn').style.display=(hostId===clientId && count>=3)?'block':'none';
+let currentLobby = null;
+const roundsNeeded = 2; // two full rounds
+
+const el = id => document.getElementById(id);
+
+function renderPlayers(players){
+  const list = el('playersList'); list.innerHTML = '';
+  const keys = Object.keys(players || {});
+  keys.forEach(k=>{
+    const p = players[k];
+    const div = document.createElement('div');
+    div.textContent = (p.name || 'Unknown') + (k === clientId ? ' (you)' : '');
+    list.appendChild(div);
   });
+  el('playersCount').textContent = keys.length;
 }
 
-function renderClues(clues, players){
-  const list = el('clueList'); list.innerHTML='';
+// start button visible only to host and when ≥3 players
+function updateStartVisibility(hostId, players){
+  const keys = Object.keys(players || {});
+  el('startBtn').style.display = (hostId === clientId && keys.length >= 3) ? 'inline-block' : 'none';
+}
+
+// render clues list (everyone sees clues)
+function renderClues(clues = [], players = {}){
+  const list = el('clueList'); list.innerHTML = '';
   clues.forEach(c=>{
-    const div=document.createElement('div');
-    const name = players[c.player]?.name || 'Unknown';
-    div.textContent = name+': '+c.text;
+    const div = document.createElement('div');
+    div.className = 'clue-item';
+    const name = players?.[c.player]?.name || 'Unknown';
+    const time = c.ts ? new Date(c.ts).toLocaleTimeString() : '';
+    div.innerHTML = `<strong>${name}:</strong> ${c.text} <span class="small"> ${time}</span>`;
     list.appendChild(div);
   });
 }
 
-function listenGame(code){
-  const lobbyRef = ref(db,'lobbies/'+code);
-  onValue(lobbyRef,snap=>{
-    const data=snap.val(); if(!data)return;
+// show turn UI and round counter and clue input visibility
+function updateTurnUI(lobby){
+  const me = clientId;
+  const players = lobby.players || {};
+  const order = lobby.turnOrder || Object.keys(players);
+  const currentTurnIdx = lobby.currentTurn || 0;
+  const totalClues = (lobby.clues || []).length;
+  const round = Math.floor(totalClues / order.length) + 1; // 1-based
+  el('roundCounter').textContent = Math.min(roundsNeeded, round);
+  // if rounds exceeded, voting should have started already
+  const currentPlayerId = order[currentTurnIdx];
+  if(lobby.voting){
+    el('turnInfo').textContent = 'Voting in progress';
+    el('clueSection').style.display = 'none';
+    el('voteSection').style.display = 'block';
+    return;
+  }
+  el('voteSection').style.display = 'none';
+  if(currentPlayerId === me){
+    el('turnInfo').textContent = 'It is your turn. Give a clue.';
+    el('clueSection').style.display = 'block';
+  } else {
+    const playerName = players?.[currentPlayerId]?.name || 'Unknown';
+    el('turnInfo').textContent = `Waiting for ${playerName} to give a clue.`;
+    el('clueSection').style.display = 'none';
+  }
+}
 
+// start listening to lobby changes
+function listenLobby(lobbyCode){
+  currentLobby = lobbyCode;
+  const lobbyRef = ref(db, 'lobbies/' + lobbyCode);
+  onValue(lobbyRef, snap=>{
+    const data = snap.val();
+    if(!data) return;
+    // update players list and start button visibility
+    renderPlayers(data.players || {});
+    updateStartVisibility(data.hostId, data.players || {});
+    // if game started, show game UI
     if(data.started){
-      el('lobbyCard').style.display='none';
-      el('gameUI').style.display='block';
-
-      const me=clientId;
-      const role=data.players[me]?.role;
-      el('roleDisplay').textContent='Your role: '+role;
-      el('wordDisplay').textContent='Word: '+(role==='imposter'?'???':data.word);
-
-      if(data.clues) renderClues(data.clues, data.players);
-
-      if(data.voting){
-        showVoting(data);
+      el('lobbyCard').style.display = 'none';
+      el('gameUI').style.display = 'block';
+      // role and word
+      const role = data.players?.[clientId]?.role || 'Unknown';
+      el('roleDisplay').textContent = 'Your role: ' + role;
+      el('wordDisplay').textContent = 'Word: ' + (role === 'imposter' ? '???' : (data.word || '—'));
+      // render clues
+      renderClues(data.clues || [], data.players || {});
+      // automatically start voting if enough clues (two full rounds)
+      const playersCount = Object.keys(data.players || {}).length || 0;
+      const totalClues = (data.clues || []).length;
+      if(!data.voting && playersCount>0 && totalClues >= roundsNeeded * playersCount){
+        // begin voting
+        update(ref(db, 'lobbies/' + currentLobby), { voting: true });
         return;
       }
-
-      updateTurnInfo(data);
+      // if voting is active, render vote UI
+      if(data.voting){
+        renderVoteUI(data);
+      }
+      updateTurnUI(data);
+    } else {
+      // not started: show lobby UI
+      el('lobbyCard').style.display = 'block';
+      el('gameUI').style.display = 'none';
+      el('playersCard').style.display = 'block';
+      el('codeDisplay').textContent = lobbyCode;
     }
   });
 }
 
-function updateTurnInfo(data){
-  const turnId = data.turnOrder[data.currentTurn];
-  const me=clientId;
-
-  const totalClues = data.clues ? data.clues.length : 0;
-  const round = Math.floor(totalClues / data.turnOrder.length);
-
-  if(round>=2){
-    startVoting(data);
-    return;
-  }
-
-  if(turnId===me){
-    el('turnInfo').textContent='It is your turn.';
-    el('clueSection').style.display='block';
-  } else {
-    el('turnInfo').textContent='Waiting for '+data.players[turnId].name;
-    el('clueSection').style.display='none';
-  }
-}
-
-async function startVoting(data){
-  await update(ref(db,'lobbies/'+currentLobby),{voting:true});
-}
-
-function showVoting(data){
-  el('clueSection').style.display='none';
-  el('voteSection').style.display='block';
-  const list = el('voteList'); list.innerHTML='';
-
-  Object.keys(data.players).forEach(id=>{
-    const btn=document.createElement('button');
-    btn.textContent=data.players[id].name;
-    btn.style.margin='5px 0';
-    btn.onclick=()=>{
-      el('submitVoteBtn').dataset.vote=id;
+// render vote UI: buttons for each player
+function renderVoteUI(lobby){
+  el('clueSection').style.display = 'none';
+  el('voteSection').style.display = 'block';
+  const list = el('voteList'); list.innerHTML = '';
+  const players = lobby.players || {};
+  Object.keys(players).forEach(id=>{
+    const btn = document.createElement('button');
+    btn.textContent = players[id].name + (id === clientId ? ' (you)' : '');
+    btn.style.width = '100%';
+    btn.style.margin = '6px 0';
+    btn.onclick = ()=> {
+      // mark current selection
+      const prev = list.querySelector('.selected');
+      if(prev) prev.classList.remove('selected');
+      btn.classList.add('selected');
+      btn.dataset.target = id;
     };
     list.appendChild(btn);
   });
 }
 
-el('submitVoteBtn').onclick=async()=>{
-  const choice = el('submitVoteBtn').dataset.vote;
-  if(!choice)return alert('Select someone');
-  await update(ref(db,'lobbies/'+currentLobby+'/votes/'+clientId),{vote:choice});
+// tally votes once all players voted
+async function watchVotesAndTally(){
+  if(!currentLobby) return;
+  const votesRef = ref(db, 'lobbies/' + currentLobby + '/votes');
+  onValue(votesRef, async snap=>{
+    const votesObj = snap.val() || {};
+    const voteKeys = Object.keys(votesObj);
+    // need number of players
+    const lobbySnap = await get(ref(db, 'lobbies/' + currentLobby));
+    const lobby = lobbySnap.val();
+    const players = lobby?.players || {};
+    const nPlayers = Object.keys(players).length;
+    if(voteKeys.length < nPlayers) return; // wait for everyone
+    // compute tally
+    const tally = {};
+    voteKeys.forEach(voterId=>{
+      const target = votesObj[voterId].vote;
+      tally[target] = (tally[target] || 0) + 1;
+    });
+    // find max
+    let max = -1, winners = [];
+    for(const target in tally){
+      if(tally[target] > max){ max = tally[target]; winners = [target]; }
+      else if(tally[target] === max){ winners.push(target); }
+    }
+    let resultText = '';
+    if(winners.length !== 1){
+      resultText = 'Tie. No one is ejected.';
+    } else {
+      const ejectedId = winners[0];
+      const ejectedName = players[ejectedId].name;
+      const wasImposter = players[ejectedId].role === 'imposter';
+      resultText = `Voted out: ${ejectedName}. They ${wasImposter ? 'were' : 'were not'} the imposter.`;
+    }
+    el('results').textContent = resultText;
+    // show final word and roles
+    const rolesText = Object.keys(players).map(pid=>{
+      return `${players[pid].name}: ${players[pid].role}`;
+    }).join('  |  ');
+    el('results').innerHTML += '<br><br>Roles: ' + rolesText + '<br>Word: ' + (lobby.word || '—');
+    // stop voting so UI won't re-trigger
+    await update(ref(db, 'lobbies/' + currentLobby), { voting: false, started: false });
+  });
+}
 
-  const snap = await get(ref(db,'lobbies/'+currentLobby));
-  const data=snap.val();
-  const votes=Object.values(data.votes||{});
-  if(votes.length===Object.keys(data.players).length){
-    const tally={}; votes.forEach(v=>{tally[v.vote]=(tally[v.vote]||0)+1;});
-    let max=0,winner=null;
-    for(const k in tally){if(tally[k]>max){max=tally[k]; winner=k;}}
-    const wasImposter = data.players[winner].role==='imposter';
-    el('results').textContent = 'Voted out: '+data.players[winner].name+' | Imposter was '+(wasImposter?'caught':'not caught');
-  }
-};
+// utilities
+function genCode(){ return Math.random().toString(36).substring(2,8).toUpperCase(); }
 
+// create / join / start / clue / vote handlers
 async function createLobby(){
-  const name=el('name').value.trim();
-  if(!name)return alert('Enter name');
-  const code=Math.random().toString(36).substring(2,8).toUpperCase();
-  currentLobby=code;
-  await set(ref(db,'lobbies/'+code),{hostId:clientId,started:false,created:serverTimestamp()});
-  await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId});
-  el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
-  updatePlayerList(code,clientId);
-  listenGame(code);
+  const name = el('name').value.trim();
+  if(!name) return alert('Enter your name');
+  const code = genCode();
+  currentLobby = code;
+  // create lobby and add player under clientId
+  await set(ref(db, 'lobbies/' + code), { hostId: clientId, started: false, created: serverTimestamp() });
+  await set(ref(db, 'lobbies/' + code + '/players/' + clientId), { name, clientId });
+  localStorage.setItem('imposter_lobby', code);
+  localStorage.setItem('imposter_playerId', clientId);
+  el('playersCard').style.display = 'block';
+  el('codeDisplay').textContent = code;
+  listenLobby(code);
+  watchVotesAndTally();
 }
 
 async function joinLobby(){
-  const name=el('name').value.trim();
-  const code=el('joinCode').value.trim().toUpperCase();
-  if(!name||!code)return alert('Enter name and code');
-  const snap=await get(ref(db,'lobbies/'+code)); if(!snap.exists())return alert('Lobby not found');
-  currentLobby=code;
-  await set(ref(db,'lobbies/'+code+'/players/'+clientId),{name,clientId});
-  el('playersCard').style.display='block'; el('codeDisplay').textContent=code;
-  updatePlayerList(code,snap.val().hostId);
-  listenGame(code);
+  const name = el('name').value.trim();
+  const code = el('joinCode').value.trim().toUpperCase();
+  if(!name || !code) return alert('Enter name and code');
+  const snap = await get(ref(db, 'lobbies/' + code));
+  if(!snap.exists()) return alert('Lobby not found');
+  currentLobby = code;
+  await set(ref(db, 'lobbies/' + code + '/players/' + clientId), { name, clientId });
+  localStorage.setItem('imposter_lobby', code);
+  localStorage.setItem('imposter_playerId', clientId);
+  el('playersCard').style.display = 'block';
+  el('codeDisplay').textContent = code;
+  listenLobby(code);
+  watchVotesAndTally();
 }
 
 async function startGame(){
-  const snap = await get(ref(db,'lobbies/'+currentLobby)); if(!snap.exists())return;
-  const players=snap.val().players;
-  const keys=Object.keys(players);
-  if(keys.length<3)return alert('Need 3 players');
-
-  const imposter=keys[Math.floor(Math.random()*keys.length)];
-  const words=['apple','dog','sun','car','book'];
-  const word=words[Math.floor(Math.random()*words.length)];
-
-  const updates={started:true,word,turnOrder:keys,currentTurn:0,clues:[]};
-  keys.forEach(k=>{updates['players/'+k+'/role']=k===imposter?'imposter':'player';});
-
-  await update(ref(db,'lobbies/'+currentLobby),updates);
+  if(!currentLobby) return;
+  const lobbySnap = await get(ref(db, 'lobbies/' + currentLobby));
+  if(!lobbySnap.exists()) return alert('Lobby not found');
+  const lobby = lobbySnap.val();
+  const players = lobby.players || {};
+  const keys = Object.keys(players);
+  if(keys.length < 3) return alert('Need at least 3 players to start');
+  // choose imposter index
+  const imposter = keys[Math.floor(Math.random() * keys.length)];
+  // choose word (you can customise or load packs)
+  const words = ['apple','dog','sun','car','book','river','moon','castle','guitar','pizza'];
+  const word = words[Math.floor(Math.random()*words.length)];
+  // create turn order = keys (randomise)
+  const shuffled = keys.slice().sort(()=>Math.random()-0.5);
+  // set roles and initial lobby state
+  const updates = {
+    started: true,
+    voting: false,
+    word: word,
+    turnOrder: shuffled,
+    currentTurn: 0,
+    clues: []
+  };
+  keys.forEach(k=>{
+    updates['players/' + k + '/role'] = (k === imposter) ? 'imposter' : 'player';
+  });
+  // clear any previous votes
+  await update(ref(db, 'lobbies/' + currentLobby), updates);
+  // also ensure votes cleared
+  await set(ref(db, 'lobbies/' + currentLobby + '/votes'), {});
 }
 
-el('createBtn').onclick=createLobby;
-el('joinBtn').onclick=joinLobby;
-el('startBtn').onclick=startGame;
+el('createBtn').onclick = createLobby;
+el('joinBtn').onclick = joinLobby;
+el('startBtn').onclick = startGame;
 
-el('submitClueBtn').onclick=async()=>{
-  const clue=el('clueInput').value.trim(); if(!clue)return;
-  const lobbyRef = ref(db,'lobbies/'+currentLobby);
-  const snap=await get(lobbyRef); const data=snap.val();
-  const clues=data.clues||[]; clues.push({player:clientId,text:clue});
-  await update(lobbyRef,{clues});
-  el('clueInput').value='';
-  let next=data.currentTurn+1;
-  if(next>=data.turnOrder.length)next=0;
-  await update(lobbyRef,{currentTurn:next});
+// submit clue: push to /clues and advance turn
+el('submitClueBtn').onclick = async () => {
+  if(!currentLobby) return alert('No lobby');
+  const text = el('clueInput').value.trim();
+  if(!text) return alert('Enter a clue');
+  // push clue (everyone sees it)
+  const clueRef = ref(db, 'lobbies/' + currentLobby + '/clues');
+  // get timestamp style stored in object
+  const newClue = { player: clientId, text, ts: Date.now() };
+  // append to clues array safely by reading then updating (small scale ok)
+  const snap = await get(clueRef);
+  const arr = snap.val() || [];
+  arr.push(newClue);
+  await set(clueRef, arr);
+  el('clueInput').value = '';
+  // advance turn index
+  const lobbyRef = ref(db, 'lobbies/' + currentLobby);
+  const lobbySnap = await get(lobbyRef);
+  const lobby = lobbySnap.val();
+  const order = lobby.turnOrder || Object.keys(lobby.players || {});
+  let next = (lobby.currentTurn || 0) + 1;
+  if(next >= order.length) next = 0;
+  await update(lobbyRef, { currentTurn: next, clues: arr });
 };
+
+// voting: user selects button, then submit
+el('submitVoteBtn').onclick = async () => {
+  if(!currentLobby) return alert('No lobby');
+  const list = el('voteList');
+  const selected = list.querySelector('.selected');
+  if(!selected) return alert('Select someone to vote for');
+  const targetId = selected.dataset.target;
+  // write vote under /votes/<clientId> = { vote: targetId }
+  await set(ref(db, 'lobbies/' + currentLobby + '/votes/' + clientId), { vote: targetId });
+  // disabling submit to avoid double votes
+  el('submitVoteBtn').disabled = true;
+};
+
+// When lobby created or joined, start watching votes tally
+watchVotesAndTally();
+
+// auto rejoin if stored
+const saved = localStorage.getItem('imposter_lobby');
+if(saved){
+  currentLobby = saved;
+  listenLobby(saved);
+  watchVotesAndTally();
+}
 </script>
 </body>
 </html>
