@@ -223,7 +223,7 @@ async function startGame(){
   await startNewRound();
 }
 
-// NEW: always picks a new word + imposter, resets votes + flags
+// always picks a new word + imposter, resets votes + flags
 async function startNewRound(){
   const snap = await get(ref(db,"lobbies/"+currentLobby));
   if (!snap.exists()) return;
@@ -239,20 +239,20 @@ async function startNewRound(){
     return;
   }
 
-  const newWord = await getRandomWord();                    // 🔥 NEW WORD
+  const newWord = await getRandomWord();
   const newImposter = keys[Math.floor(Math.random()*keys.length)];
   const newOrder = keys.slice().sort(()=>Math.random()-0.5);
 
   const updates = {
     started:true,
     voting:false,
-    voteResolved:false,                                     // 🔥 reset voting flag
+    voteResolved:false,
     word:newWord,
     turnOrder:newOrder,
     currentTurn:0,
     clues:[],
     round:1,
-    resultsMessage:""                                       // clear reveal text
+    resultsMessage:""
   };
 
   keys.forEach(k=>{
@@ -276,19 +276,25 @@ async function submitClue(){
   const clues = lobby.clues || [];
   clues.push({player:clientId,text:clue,ts:Date.now()});
 
-  const total = clues.length;
   const playersCount = (lobby.turnOrder || []).length || 1;
+  const total = clues.length;
   const cycle = Math.ceil(total / playersCount);
+
+  const currentTurn = lobby.currentTurn ?? 0;
+  const nextTurn = (currentTurn + 1) % playersCount;
 
   const updates = {
     clues,
-    currentTurn:(lobby.currentTurn+1)%playersCount,
-    round:Math.min(maxRounds,cycle)
+    round: Math.min(maxRounds, cycle)
   };
 
-  if (cycle > maxRounds){
+  // 🔥 Fix: only go to voting AFTER full last round is finished
+  if (cycle >= maxRounds && nextTurn === 0) {
+    // we've just completed the last player's clue of the final round
     updates.voting = true;
-    updates.voteResolved = false; // 🔥 mark that this voting phase is active
+    updates.voteResolved = false;
+  } else {
+    updates.currentTurn = nextTurn;
   }
 
   await update(ref(db,"lobbies/"+currentLobby),updates);
@@ -333,7 +339,7 @@ async function checkVotes(){
   const lobby = snap.val();
 
   // already resolved this voting phase? bail
-  if (lobby.voteResolved) return;           // 🔥 stop double-trigger glitches
+  if (lobby.voteResolved) return;
 
   const votes = lobby.votes || {};
   const players = lobby.players || {};
@@ -372,7 +378,7 @@ async function checkVotes(){
   await update(ref(db,"lobbies/"+currentLobby),{
     resultsMessage: message,
     voting:false,
-    voteResolved:true                 // 🔥 prevent re-tally glitches
+    voteResolved:true
   });
 
   // Start a fresh round after 3 seconds
