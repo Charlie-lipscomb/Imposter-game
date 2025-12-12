@@ -146,7 +146,7 @@ const maxRounds = 2; // clue cycles before voting
 const el = id => document.getElementById(id);
 
 /* ================= Word picker via Datamuse ================= */
-/* Pulls random words in the "objects" topic from Datamuse API */
+/* Pulls random "objects" words from Datamuse API */
 async function getRandomWord(){
   try {
     const res = await fetch("https://api.datamuse.com/words?topics=objects&max=500");
@@ -233,7 +233,7 @@ async function startGame(){
   await startNewRound();
 }
 
-// always picks a new word + imposter, resets votes + flags
+// ALWAYS picks a new word + new imposter, resets votes + flags
 async function startNewRound(){
   const snap = await get(ref(db,"lobbies/"+currentLobby));
   if (!snap.exists()) return;
@@ -249,7 +249,8 @@ async function startNewRound(){
     return;
   }
 
-  const newWord = await getRandomWord(); // 🔥 from Datamuse
+  // 🎲 NEW WORD + NEW IMPOSTER EVERY ROUND
+  const newWord = await getRandomWord();
   const newImposter = keys[Math.floor(Math.random()*keys.length)];
   const newOrder = keys.slice().sort(()=>Math.random()-0.5);
 
@@ -298,7 +299,7 @@ async function submitClue(){
     round: Math.min(maxRounds, cycle)
   };
 
-  // only go to voting AFTER full last round is finished
+  // Only go to voting AFTER full last round is finished
   if (cycle >= maxRounds && nextTurn === 0) {
     // we've just completed the last player's clue of the final round
     updates.voting = true;
@@ -391,7 +392,7 @@ async function checkVotes(){
     voteResolved:true
   });
 
-  // Start a fresh round after 3 seconds
+  // Start a fresh round after 3 seconds → NEW WORD + NEW IMPOSTER
   setTimeout(async ()=>{
     await startNewRound();
   },3000);
