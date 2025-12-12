@@ -4,21 +4,56 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Imposter Guess the Word</title>
+
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
-  .card{background:#1a1f2b;padding:18px;border-radius:12px;width:680px;max-width:96%}
-  input,button,textarea{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:none;box-sizing:border-box}
+  body{
+    font-family:Arial,Helvetica,sans-serif;
+    background:#0f1724;
+    color:#e8f0fb;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    margin:0
+  }
+  .card{
+    background:#1a1f2b;
+    padding:18px;
+    border-radius:12px;
+    width:680px;
+    max-width:96%
+  }
+  input,button,textarea{
+    width:100%;
+    padding:10px;
+    margin:6px 0;
+    border-radius:6px;
+    border:none;
+    box-sizing:border-box
+  }
+  textarea{resize:none}
   .btn-primary{background:#4a90e2;color:white}
   .btn-success{background:#28a745;color:white}
-  .player-list div,.clue-item{padding:8px;background:rgba(255,255,255,0.03);margin-bottom:6px;border-radius:6px}
+  .player-list div,.clue-item{
+    padding:8px;
+    background:rgba(255,255,255,0.03);
+    margin-bottom:6px;
+    border-radius:6px
+  }
   #gameUI,#voteSection{display:none}
   .small{font-size:13px;color:#9aa7b7}
   .row{display:flex;gap:8px}
   .col2{flex:1}
   .inline-btn{width:auto;padding:8px 12px}
-  #results{margin-top:12px;padding:10px;background:#22303f;border-radius:8px}
+  #results{
+    margin-top:12px;
+    padding:10px;
+    background:#22303f;
+    border-radius:8px
+  }
 </style>
 </head>
+
 <body>
 
 <div class="card" id="lobbyCard">
@@ -38,11 +73,16 @@
       <div>Lobby Code: <strong id="codeDisplay">–</strong></div>
       <div class="small">Players: <span id="playersCount">0</span></div>
     </div>
+
     <div id="playersList" class="player-list"></div>
+
     <div style="margin-top:10px">
       <button id="startBtn" class="btn-success" style="display:none">Start Game</button>
     </div>
-    <div class="small" style="margin-top:8px">Host can start when there are at least 3 players</div>
+
+    <div class="small" style="margin-top:8px">
+      Host can start when there are at least 3 players
+    </div>
   </div>
 </div>
 
@@ -76,22 +116,25 @@
 </div>
 
 <script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, set, get, onValue, update, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+/* ================= Firebase ================= */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXqev3PU7OfSRtDJ6BGQ3Alz3n2_lwuAk",
   authDomain: "imposter-game-3b77e.firebaseapp.com",
   databaseURL: "https://imposter-game-3b77e-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "imposter-game-3b77e",
-  storageBucket: "imposter-game-3b77e.firebasestorage.app",
+  storageBucket: "imposter-game-3b77e.appspot.com",
   messagingSenderId: "929913946798",
-  appId: "1:929913946798:web:e961f81be2c95b284f633f",
-  measurementId: "G-KQNCHZH2EL"
+  appId: "1:929913946798:web:e961f81be2c95b284f633f"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+
+/* ================= State ================= */
 
 let clientId = localStorage.getItem("id") || ("c_" + Math.random().toString(36).slice(2));
 localStorage.setItem("id", clientId);
@@ -101,277 +144,253 @@ const maxRounds = 2;
 
 const el = id => document.getElementById(id);
 
-// word picker
-async function getRandomWord() {
-  const snap = await get(ref(db, "words"));
-  const words = snap.val() || {};
-  const arr = Object.values(words);
-  if (arr.length === 0) return "unknown";
-  return arr[Math.floor(Math.random() * arr.length)];
+/* ================= Helpers ================= */
+
+async function getRandomWord(){
+  const snap = await get(ref(db,"words"));
+  const arr = Object.values(snap.val() || {});
+  return arr.length ? arr[Math.floor(Math.random()*arr.length)] : "unknown";
 }
 
-// create lobby
+function updateStartButtonUI(lobby){
+  const players = lobby.players || {};
+  const count = Object.keys(players).length;
+  const isHost = lobby.hostId === clientId;
+
+  el("startBtn").style.display =
+    isHost && !lobby.started && count >= 3 ? "block" : "none";
+}
+
+/* ================= Lobby ================= */
+
 async function createLobby(){
   const name = el("name").value.trim();
-  if (!name) return alert("Enter a name");
+  if(!name) return alert("Enter a name");
+
   const code = Math.random().toString(36).slice(2,8).toUpperCase();
   currentLobby = code;
 
-  await set(ref(db, "lobbies/" + code), {
+  await set(ref(db,"lobbies/"+code),{
     hostId: clientId,
     created: serverTimestamp(),
-    started: false
+    started:false
   });
 
-  await set(ref(db, "lobbies/" + code + "/players/" + clientId), {
-    name,
-    clientId
+  await set(ref(db,"lobbies/"+code+"/players/"+clientId),{
+    name, clientId
   });
 
-  el("playersCard").style.display = "block";
-  el("codeDisplay").textContent = code;
+  el("playersCard").style.display="block";
+  el("codeDisplay").textContent=code;
   listenLobby(code);
 }
 
-// join
 async function joinLobby(){
   const name = el("name").value.trim();
   const code = el("joinCode").value.trim().toUpperCase();
-  if (!name || !code) return alert("Enter details");
-  const snap = await get(ref(db, "lobbies/" + code));
-  if (!snap.exists()) return alert("No lobby");
+  if(!name || !code) return alert("Enter details");
+
+  const snap = await get(ref(db,"lobbies/"+code));
+  if(!snap.exists()) return alert("Lobby not found");
 
   currentLobby = code;
 
-  await set(ref(db, "lobbies/" + code + "/players/" + clientId), {
-    name,
-    clientId
+  await set(ref(db,"lobbies/"+code+"/players/"+clientId),{
+    name, clientId
   });
 
-  el("playersCard").style.display = "block";
-  el("codeDisplay").textContent = code;
+  el("playersCard").style.display="block";
+  el("codeDisplay").textContent=code;
   listenLobby(code);
 }
 
-// start
+/* ================= Game Start ================= */
+
 async function startGame(){
-  const snap = await get(ref(db, "lobbies/" + currentLobby));
+  const snap = await get(ref(db,"lobbies/"+currentLobby));
   const lobby = snap.val();
-  const players = lobby.players;
-  const keys = Object.keys(players);
-  if (keys.length < 3) return alert("Need 3 players");
+  if(lobby.hostId !== clientId) return alert("Only host can start");
+
+  const players = Object.keys(lobby.players || {});
+  if(players.length < 3) return alert("Need at least 3 players");
 
   await startNewRound();
 }
 
-// start round
 async function startNewRound(){
-  const snap = await get(ref(db, "lobbies/" + currentLobby));
+  const snap = await get(ref(db,"lobbies/"+currentLobby));
   const lobby = snap.val();
-  const players = lobby.players;
-  const keys = Object.keys(players);
+  const keys = Object.keys(lobby.players);
 
-  const imposter = keys[Math.floor(Math.random() * keys.length)];
+  const imposter = keys[Math.floor(Math.random()*keys.length)];
+  const order = keys.slice().sort(()=>Math.random()-0.5);
   const word = await getRandomWord();
-  const order = keys.slice().sort(()=>Math.random() - 0.5);
 
   const updates = {
-    started: true,
-    voting: false,
+    started:true,
+    voting:false,
     word,
-    turnOrder: order,
-    currentTurn: 0,
-    clues: [],
-    round: 1
+    turnOrder:order,
+    currentTurn:0,
+    clues:[],
+    round:1
   };
 
   keys.forEach(k=>{
-    updates["players/" + k + "/role"] = k === imposter ? "imposter" : "player";
+    updates["players/"+k+"/role"] = k===imposter?"imposter":"player";
   });
 
-  await update(ref(db, "lobbies/" + currentLobby), updates);
-  await set(ref(db, "lobbies/" + currentLobby + "/votes"), {});
+  await update(ref(db,"lobbies/"+currentLobby),updates);
+  await set(ref(db,"lobbies/"+currentLobby+"/votes"),{});
 }
 
-// submit clue
+/* ================= Clues ================= */
+
 async function submitClue(){
   const clue = el("clueInput").value.trim();
-  if (!clue) return;
+  if(!clue) return;
 
-  const snap = await get(ref(db, "lobbies/" + currentLobby));
+  const snap = await get(ref(db,"lobbies/"+currentLobby));
   const lobby = snap.val();
-  const clues = lobby.clues || [];
-  const order = lobby.turnOrder;
-  const turn = lobby.currentTurn;
-  const next = (turn + 1) % order.length;
 
-  clues.push({
-    player: clientId,
-    text: clue,
-    ts: Date.now()
-  });
+  const clues = lobby.clues || [];
+  clues.push({player:clientId,text:clue});
 
   const total = clues.length;
-  const cycle = Math.ceil(total / order.length);
+  const cycle = Math.ceil(total / lobby.turnOrder.length);
 
-  const updates = {
+  await update(ref(db,"lobbies/"+currentLobby),{
     clues,
-    currentTurn: next,
-    round: Math.min(maxRounds, cycle)
-  };
-
-  if (cycle > maxRounds){
-    updates.voting = true;
-  }
-
-  await update(ref(db, "lobbies/" + currentLobby), updates);
-  el("clueInput").value = "";
-}
-
-// render lobby
-function renderPlayers(players){
-  el("playersList").innerHTML = "";
-  const keys = Object.keys(players);
-  keys.forEach(k=>{
-    const d = document.createElement("div");
-    d.textContent = players[k].name + (k === clientId ? " (you)" : "");
-    el("playersList").appendChild(d);
+    currentTurn:(lobby.currentTurn+1)%lobby.turnOrder.length,
+    round:Math.min(maxRounds,cycle),
+    voting: cycle>maxRounds
   });
-  el("playersCount").textContent = keys.length;
+
+  el("clueInput").value="";
 }
 
-function showTurnUI(lobby){
-  const me = clientId;
-  const players = lobby.players;
-  const order = lobby.turnOrder;
-  const turn = lobby.currentTurn;
-  const currentPlayer = order[turn];
-
-  el("roundCounter").textContent = lobby.round;
-
-  if (lobby.voting){
-    el("clueSection").style.display = "none";
-    el("voteSection").style.display = "block";
-    buildVoteList(players);
-    el("turnInfo").textContent = "Voting in progress";
-    return;
-  }
-
-  el("voteSection").style.display = "none";
-
-  if (currentPlayer === me){
-    el("clueSection").style.display = "block";
-    el("turnInfo").textContent = "Your turn, enter a clue";
-  } else {
-    el("clueSection").style.display = "none";
-    el("turnInfo").textContent = "Waiting for " + players[currentPlayer].name;
-  }
-}
+/* ================= Voting ================= */
 
 function buildVoteList(players){
-  el("voteList").innerHTML = "";
+  el("voteList").innerHTML="";
   Object.keys(players).forEach(k=>{
-    if (k === clientId) return;
-    const b = document.createElement("button");
-    b.textContent = players[k].name;
-    b.style.display = "block";
-    b.onclick = ()=> {
-      el("voteList").querySelectorAll("button").forEach(x=>x.style.background = "");
-      b.style.background = "#4a90e2";
-      el("voteList").setAttribute("data-vote", k);
+    if(k===clientId) return;
+    const b=document.createElement("button");
+    b.textContent=players[k].name;
+    b.onclick=()=>{
+      el("voteList").querySelectorAll("button").forEach(x=>x.style.background="");
+      b.style.background="#4a90e2";
+      el("voteList").dataset.vote=k;
     };
     el("voteList").appendChild(b);
   });
 }
 
-// submit vote
 async function submitVote(){
-  const voted = el("voteList").getAttribute("data-vote");
-  if (!voted) return alert("Pick a player");
+  const voted = el("voteList").dataset.vote;
+  if(!voted) return alert("Pick a player");
 
-  await update(ref(db, "lobbies/" + currentLobby + "/votes/" + clientId), {
-    voted
-  });
+  await set(ref(db,"lobbies/"+currentLobby+"/votes/"+clientId),{voted});
 
-  checkVotes();
+  const snap = await get(ref(db,"lobbies/"+currentLobby));
+  if(snap.val().hostId === clientId) checkVotes();
 }
 
-// tally votes
 async function checkVotes(){
-  const snap = await get(ref(db, "lobbies/" + currentLobby));
+  const snap = await get(ref(db,"lobbies/"+currentLobby));
   const lobby = snap.val();
   const votes = lobby.votes || {};
-  const players = lobby.players;
-  const totalNeeded = Object.keys(players).length;
+  if(Object.keys(votes).length < Object.keys(lobby.players).length) return;
 
-  if (Object.keys(votes).length < totalNeeded) return;
+  const tally = {};
+  Object.values(votes).forEach(v=>tally[v.voted]=(tally[v.voted]||0)+1);
 
-  const counts = {};
-  Object.values(votes).forEach(v=>{
-    counts[v.voted] = (counts[v.voted] || 0) + 1;
-  });
+  const max = Math.max(...Object.values(tally));
+  const top = Object.keys(tally).filter(k=>tally[k]===max);
 
-  let max = -1;
-  let most = [];
-  Object.keys(counts).forEach(k=>{
-    if (counts[k] > max){
-      max = counts[k];
-      most = [k];
-    } else if (counts[k] === max){
-      most.push(k);
-    }
-  });
+  el("results").textContent =
+    top.length>1 ? "Tie vote. No one eliminated."
+                 : "Eliminated: "+lobby.players[top[0]].name;
 
-  const resultBox = el("results");
-  if (most.length > 1){
-    resultBox.textContent = "Tie. No one was eliminated.";
-  } else {
-    const eliminated = most[0];
-    resultBox.textContent = "Eliminated player: " + players[eliminated].name;
-  }
-
-  setTimeout(startNewRound, 3000);
+  setTimeout(startNewRound,3000);
 }
 
-// live updates
-function listenLobby(code){
-  const lobbyRef = ref(db, "lobbies/" + code);
-  onValue(lobbyRef, snap=>{
-    const data = snap.val();
-    if (!data) return;
+/* ================= UI ================= */
 
-    renderPlayers(data.players || {});
-    el("lobbyCard").style.display = data.started ? "none" : "block";
-    el("gameUI").style.display = data.started ? "block" : "none";
-
-    if (!data.started) return;
-
-    const myRole = data.players?.[clientId]?.role || "Unknown";
-    el("roleDisplay").textContent = "Role: " + myRole;
-    el("wordDisplay").textContent = myRole === "imposter" ? "Word: ???" : "Word: " + data.word;
-
-    renderClues(data.clues || [], data.players || {});
-    showTurnUI(data);
+function renderPlayers(players){
+  el("playersList").innerHTML="";
+  Object.keys(players).forEach(k=>{
+    const d=document.createElement("div");
+    d.textContent=players[k].name+(k===clientId?" (you)":"");
+    el("playersList").appendChild(d);
   });
+  el("playersCount").textContent=Object.keys(players).length;
 }
 
-// render clues
-function renderClues(clues, players){
-  el("clueList").innerHTML = "";
+function renderClues(clues,players){
+  el("clueList").innerHTML="";
   clues.forEach(c=>{
-    const d = document.createElement("div");
-    d.className = "clue-item";
-    d.innerHTML = "<strong>" + players[c.player].name + "</strong>: " + c.text;
+    const d=document.createElement("div");
+    d.className="clue-item";
+    d.innerHTML="<strong>"+(players[c.player]?.name||"Unknown")+"</strong>: "+c.text;
     el("clueList").appendChild(d);
   });
 }
 
-// buttons
-el("createBtn").onclick = createLobby;
-el("joinBtn").onclick = joinLobby;
-el("startBtn").onclick = startGame;
-el("submitClueBtn").onclick = submitClue;
-el("submitVoteBtn").onclick = submitVote;
+function showTurnUI(lobby){
+  el("roundCounter").textContent=lobby.round;
+
+  if(lobby.voting){
+    el("clueSection").style.display="none";
+    el("voteSection").style.display="block";
+    buildVoteList(lobby.players);
+    el("turnInfo").textContent="Voting phase";
+    return;
+  }
+
+  el("voteSection").style.display="none";
+
+  const current = lobby.turnOrder[lobby.currentTurn];
+  if(current===clientId){
+    el("clueSection").style.display="block";
+    el("turnInfo").textContent="Your turn";
+  }else{
+    el("clueSection").style.display="none";
+    el("turnInfo").textContent="Waiting for "+lobby.players[current].name;
+  }
+}
+
+/* ================= Live Sync ================= */
+
+function listenLobby(code){
+  onValue(ref(db,"lobbies/"+code),snap=>{
+    const data=snap.val();
+    if(!data) return;
+
+    renderPlayers(data.players||{});
+    updateStartButtonUI(data);
+
+    el("lobbyCard").style.display=data.started?"none":"block";
+    el("gameUI").style.display=data.started?"block":"none";
+    if(!data.started) return;
+
+    const role=data.players[clientId]?.role;
+    el("roleDisplay").textContent="Role: "+role;
+    el("wordDisplay").textContent=
+      role==="imposter"?"Word: ???":"Word: "+data.word;
+
+    renderClues(data.clues||[],data.players||{});
+    showTurnUI(data);
+  });
+}
+
+/* ================= Buttons ================= */
+
+el("createBtn").onclick=createLobby;
+el("joinBtn").onclick=joinLobby;
+el("startBtn").onclick=startGame;
+el("submitClueBtn").onclick=submitClue;
+el("submitVoteBtn").onclick=submitVote;
 </script>
 
 </body>
