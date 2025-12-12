@@ -141,7 +141,7 @@ let clientId = localStorage.getItem("id") || ("c_" + Math.random().toString(36).
 localStorage.setItem("id", clientId);
 
 let currentLobby = null;
-const maxRounds = 2; // number of clue cycles before voting
+const maxRounds = 2; // clue cycles before voting
 
 const el = id => document.getElementById(id);
 
@@ -223,14 +223,15 @@ async function startGame(){
   await startNewRound();
 }
 
+// NEW: always picks a new word + imposter, resets votes + flags
 async function startNewRound(){
   const snap = await get(ref(db,"lobbies/"+currentLobby));
   if (!snap.exists()) return;
   const lobby = snap.val();
   const playersObj = lobby.players || {};
   const keys = Object.keys(playersObj);
+
   if (keys.length < 3) {
-    // not enough players to continue
     await update(ref(db,"lobbies/"+currentLobby),{
       started:false,
       resultsMessage: "Not enough players to continue. Waiting in lobby..."
@@ -238,23 +239,24 @@ async function startNewRound(){
     return;
   }
 
-  const imposter = keys[Math.floor(Math.random()*keys.length)];
-  const order = keys.slice().sort(()=>Math.random()-0.5);
-  const word = await getRandomWord();
+  const newWord = await getRandomWord();                    // 🔥 NEW WORD
+  const newImposter = keys[Math.floor(Math.random()*keys.length)];
+  const newOrder = keys.slice().sort(()=>Math.random()-0.5);
 
   const updates = {
     started:true,
     voting:false,
-    word,
-    turnOrder:order,
+    voteResolved:false,                                     // 🔥 reset voting flag
+    word:newWord,
+    turnOrder:newOrder,
     currentTurn:0,
     clues:[],
     round:1,
-    resultsMessage: "" // clear old message
+    resultsMessage:""                                       // clear reveal text
   };
 
   keys.forEach(k=>{
-    updates["players/"+k+"/role"] = k===imposter?"imposter":"player";
+    updates["players/"+k+"/role"] = (k===newImposter ? "imposter" : "player");
   });
 
   await update(ref(db,"lobbies/"+currentLobby),updates);
@@ -281,9 +283,13 @@ async function submitClue(){
   const updates = {
     clues,
     currentTurn:(lobby.currentTurn+1)%playersCount,
-    round:Math.min(maxRounds,cycle),
-    voting: cycle>maxRounds
+    round:Math.min(maxRounds,cycle)
   };
+
+  if (cycle > maxRounds){
+    updates.voting = true;
+    updates.voteResolved = false; // 🔥 mark that this voting phase is active
+  }
 
   await update(ref(db,"lobbies/"+currentLobby),updates);
 
@@ -314,7 +320,7 @@ async function submitVote(){
 
   await set(ref(db,"lobbies/"+currentLobby+"/votes/"+clientId),{voted});
 
-  // Only host tallies to avoid double counting
+  // Only host tallies to avoid multiple checks
   const snap = await get(ref(db,"lobbies/"+currentLobby));
   if (!snap.exists()) return;
   const lobby = snap.val();
@@ -325,6 +331,9 @@ async function checkVotes(){
   const snap = await get(ref(db,"lobbies/"+currentLobby));
   if (!snap.exists()) return;
   const lobby = snap.val();
+
+  // already resolved this voting phase? bail
+  if (lobby.voteResolved) return;           // 🔥 stop double-trigger glitches
 
   const votes = lobby.votes || {};
   const players = lobby.players || {};
@@ -359,10 +368,11 @@ async function checkVotes(){
     message += "The imposter could not be determined.";
   }
 
-  // Save message so all players see it
+  // Save message & mark voting as resolved so it can't run twice
   await update(ref(db,"lobbies/"+currentLobby),{
     resultsMessage: message,
-    voting:false // stop voting phase
+    voting:false,
+    voteResolved:true                 // 🔥 prevent re-tally glitches
   });
 
   // Start a fresh round after 3 seconds
