@@ -145,19 +145,32 @@ const maxRounds = 2; // clue cycles before voting
 
 const el = id => document.getElementById(id);
 
-/* ================= Word picker via Datamuse ================= */
-/* Pulls random "objects" words from Datamuse API */
-async function getRandomWord(){
+/* ================= Word picker via Random Word API ================= */
+
+const FALLBACK_WORDS = [
+  "PIZZA",
+  "CASTLE",
+  "RAINBOW",
+  "DRAGON",
+  "BICYCLE",
+  "VOLCANO",
+  "ELEPHANT",
+  "SPACESHIP",
+  "BANANA",
+  "OCEAN"
+];
+
+async function getRandomWord() {
   try {
-    const res = await fetch("https://api.datamuse.com/words?topics=objects&max=500");
+    const res = await fetch("https://random-word-api.herokuapp.com/word?number=1");
     if (!res.ok) throw new Error("Bad response");
-    const arr = await res.json();
-    if (!arr.length) throw new Error("Empty list");
-    const word = arr[Math.floor(Math.random() * arr.length)].word;
-    return word.toUpperCase();
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) throw new Error("Empty word array");
+    return String(data[0]).toUpperCase();
   } catch (e) {
-    console.error("Word fetch failed, falling back:", e);
-    return "MYSTERY";
+    console.error("Word API failed, using fallback:", e);
+    const idx = Math.floor(Math.random() * FALLBACK_WORDS.length);
+    return FALLBACK_WORDS[idx];
   }
 }
 
@@ -233,7 +246,7 @@ async function startGame(){
   await startNewRound();
 }
 
-// ALWAYS picks a new word + new imposter, resets votes + flags
+// always picks a new word + imposter, resets votes + flags
 async function startNewRound(){
   const snap = await get(ref(db,"lobbies/"+currentLobby));
   if (!snap.exists()) return;
@@ -249,8 +262,7 @@ async function startNewRound(){
     return;
   }
 
-  // 🎲 NEW WORD + NEW IMPOSTER EVERY ROUND
-  const newWord = await getRandomWord();
+  const newWord = await getRandomWord(); // 🔥 Random Word API
   const newImposter = keys[Math.floor(Math.random()*keys.length)];
   const newOrder = keys.slice().sort(()=>Math.random()-0.5);
 
@@ -299,7 +311,7 @@ async function submitClue(){
     round: Math.min(maxRounds, cycle)
   };
 
-  // Only go to voting AFTER full last round is finished
+  // only go to voting AFTER full last round is finished
   if (cycle >= maxRounds && nextTurn === 0) {
     // we've just completed the last player's clue of the final round
     updates.voting = true;
@@ -392,7 +404,7 @@ async function checkVotes(){
     voteResolved:true
   });
 
-  // Start a fresh round after 3 seconds → NEW WORD + NEW IMPOSTER
+  // Start a fresh round after 3 seconds
   setTimeout(async ()=>{
     await startNewRound();
   },3000);
