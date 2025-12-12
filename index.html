@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Imposter — Guess the Word</title>
+<title>Imposter - Guess the Word</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif;background:#0f1724;color:#e8f0fb;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
   .card{background:#1a1f2b;padding:18px;border-radius:12px;width:680px;max-width:96%}
@@ -21,7 +21,7 @@
 </head>
 <body>
   <div class="card" id="lobbyCard">
-    <h2>Imposter — Guess the Word</h2>
+    <h2>Imposter - Guess the Word</h2>
 
     <label class="small">Your name</label>
     <input id="name" placeholder="Your name" />
@@ -34,7 +34,7 @@
 
     <div id="playersCard" style="display:none;margin-top:12px">
       <div class="row" style="align-items:center;justify-content:space-between">
-        <div>Lobby Code: <strong id="codeDisplay">—</strong></div>
+        <div>Lobby Code: <strong id="codeDisplay">-</strong></div>
         <div class="small">Players: <span id="playersCount">0</span></div>
       </div>
 
@@ -49,8 +49,8 @@
   <!-- Game UI -->
   <div class="card" id="gameUI">
     <h2>Game In Progress</h2>
-    <div class="small" id="roleDisplay">Role: —</div>
-    <div class="small" id="wordDisplay" style="margin-bottom:8px">Word: —</div>
+    <div class="small" id="roleDisplay">Role: -</div>
+    <div class="small" id="wordDisplay" style="margin-bottom:8px">Word: -</div>
 
     <h3>Clues (everyone sees them)</h3>
     <div id="clueList" style="max-height:200px;overflow:auto;margin-bottom:8px"></div>
@@ -123,23 +123,29 @@ function updateStartVisibility(hostId, players){
 
 function renderClues(clues = [], players = {}){
   const list = el('clueList'); list.innerHTML = '';
-  clues.forEach(c=>{
+  (clues || []).forEach(c=>{
     const div = document.createElement('div');
     div.className = 'clue-item';
     const name = players?.[c.player]?.name || 'Unknown';
     const time = c.ts ? new Date(c.ts).toLocaleTimeString() : '';
-    div.innerHTML = `<strong>${name}:</strong> ${c.text} <span class="small"> ${time}</span>`;
+    div.innerHTML = `<strong>${name}:</strong> ${escapeHtml(c.text)} <span class="small"> ${time}</span>`;
     list.appendChild(div);
   });
+}
+
+function escapeHtml(text){
+  if(!text) return '';
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function updateTurnUI(lobby){
   const me = clientId;
   const players = lobby.players || {};
-  const order = lobby.turnOrder || Object.keys(players);
-  const currentTurnIdx = lobby.currentTurn || 0;
+  const order = lobby.turnOrder || Object.keys(players || {});
+  const currentTurnIdx = typeof lobby.currentTurn === 'number' ? lobby.currentTurn : 0;
   const totalClues = (lobby.clues || []).length;
-  const round = Math.floor(totalClues / order.length) + 1;
+  const orderLength = order.length || 1;
+  const round = Math.floor(totalClues / orderLength) + 1;
   el('roundCounter').textContent = Math.min(roundsNeeded, round);
 
   const currentPlayerId = order[currentTurnIdx];
@@ -147,6 +153,7 @@ function updateTurnUI(lobby){
     el('turnInfo').textContent = 'Voting in progress';
     el('clueSection').style.display = 'none';
     el('voteSection').style.display = 'block';
+    renderVoteList(lobby);
     return;
   }
 
@@ -165,7 +172,7 @@ function updateTurnUI(lobby){
 async function getRandomWord() {
   const snap = await get(ref(db, 'words'));
   const wordsObj = snap.val() || {};
-  const wordsArr = Object.values(wordsObj);
+  const wordsArr = Object.values(wordsObj).filter(Boolean);
   if(wordsArr.length === 0) return 'unknown';
   return wordsArr[Math.floor(Math.random() * wordsArr.length)];
 }
@@ -214,7 +221,8 @@ async function startGame(){
     word,
     turnOrder,
     currentTurn: 0,
-    clues: []
+    clues: [],
+    round: 1
   };
 
   keys.forEach(k=>{
@@ -229,6 +237,8 @@ async function startGame(){
 el('createBtn').onclick = createLobby;
 el('joinBtn').onclick = joinLobby;
 el('startBtn').onclick = startGame;
+el('submitClueBtn').onclick = submitClue;
+el('submitVoteBtn').onclick = submitVote;
 
 // listen lobby
 function listenLobby(code){
@@ -244,11 +254,137 @@ function listenLobby(code){
     if(data.started){
       const role = data.players?.[clientId]?.role || 'Unknown';
       el('roleDisplay').textContent = 'Your role: ' + role;
-      el('wordDisplay').textContent = 'Word: ' + (role === 'imposter' ? '???' : (data.word || '—'));
+      el('wordDisplay').textContent = 'Word: ' + (role === 'imposter' ? '???' : (data.word || '-'));
       renderClues(data.clues || [], data.players || {});
+      updateTurnUI(data);
+    } else {
+      // clear game UI hints when not started
+      el('roleDisplay').textContent = 'Role: -';
+      el('wordDisplay').textContent = 'Word: -';
+      el('clueList').innerHTML = '';
+      el('results').innerHTML = '';
+      el('voteList').innerHTML = '';
     }
   });
 }
+
+// submit a clue and advance turn; when full round complete, start voting
+async function submitClue(){
+  if(!currentLobby) return alert('Not in a lobby');
+  const text = el('clueInput').value.trim();
+  if(!text) return alert('Enter a clue');
+  // simple safeguard: do not allow exact word if present in word display (client-side best-effort)
+  const snap = await get(ref(db, 'lobbies/' + currentLobby));
+  const lobby = snap.val();
+  if(!lobby) return alert('Lobby not found');
+  const players = lobby.players || {};
+  const order = lobby.turnOrder || Object.keys(players || {});
+  const curIdx = typeof lobby.currentTurn === 'number' ? lobby.currentTurn : 0;
+
+  // append clue array (read-modify-write - acceptable for casual use)
+  const newClues = (lobby.clues || []).slice();
+  newClues.push({ player: clientId, text, ts: Date.now() });
+
+  const updates = {};
+  updates['clues'] = newClues;
+
+  // advance turn
+  const nextIdx = (curIdx + 1) % (order.length || 1);
+  updates['currentTurn'] = nextIdx;
+
+  // if we've cycled back to 0 then whole round finished -> enter voting
+  if(nextIdx === 0){
+    updates['voting'] = true;
+    // keep round number (increment)
+    updates['round'] = (lobby.round || 1);
+  }
+
+  await update(ref(db, 'lobbies/' + currentLobby), updates);
+  el('clueInput').value = '';
+}
+
+// render vote choices
+function renderVoteList(lobby){
+  const players = lobby.players || {};
+  const keys = Object.keys(players);
+  const container = el('voteList');
+  container.innerHTML = '';
+  keys.forEach(k=>{
+    const row = document.createElement('div');
+    row.style.marginBottom = '6px';
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'vote';
+    radio.value = k;
+    radio.style.marginRight = '8px';
+    label.appendChild(radio);
+    label.appendChild(document.createTextNode(players[k].name || 'Unknown'));
+    row.appendChild(label);
+    container.appendChild(row);
+  });
+}
+
+// submit vote and when all voted tally and show results
+async function submitVote(){
+  if(!currentLobby) return alert('Not in a lobby');
+  const sel = document.querySelector('input[name="vote"]:checked');
+  if(!sel) return alert('Choose someone to vote for');
+  const votedFor = sel.value;
+  const voteRef = ref(db, 'lobbies/' + currentLobby + '/votes/' + clientId);
+  // set vote
+  await set(voteRef, votedFor);
+
+  // check if all players have voted
+  const snap = await get(ref(db, 'lobbies/' + currentLobby));
+  const lobby = snap.val();
+  if(!lobby) return;
+  const players = lobby.players || {};
+  const votes = lobby.votes || {};
+  const playerCount = Object.keys(players).length;
+  const voteCount = Object.keys(votes).length;
+
+  // if not all voted yet, just inform user
+  if(voteCount < playerCount){
+    alert('Vote recorded. Waiting for others.');
+    return;
+  }
+
+  // tally votes
+  const tally = {};
+  Object.values(votes).forEach(v=>{
+    tally[v] = (tally[v] || 0) + 1;
+  });
+  // find max
+  let topId = null, topCount = 0;
+  Object.entries(tally).forEach(([pid, ct])=>{
+    if(ct > topCount){ topCount = ct; topId = pid; }
+  });
+
+  const imposterId = Object.keys(lobby.players || {}).find(k => (lobby.players[k] || {}).role === 'imposter');
+
+  const chosenName = lobby.players?.[topId]?.name || 'Unknown';
+  const imposterName = lobby.players?.[imposterId]?.name || 'Unknown';
+
+  const resultsEl = el('results');
+  let html = `<strong>Voting results</strong><br/>Chosen: ${escapeHtml(chosenName)} (${topCount} vote${topCount>1?'s':''})<br/>Actual imposter: ${escapeHtml(imposterName)}<br/>`;
+  html += (topId === imposterId) ? '<div class="small">They guessed correctly.</div>' : '<div class="small">They guessed wrong.</div>';
+
+  resultsEl.innerHTML = html;
+
+  // end game: reset started to false so players see lobby again
+  // optionally you could keep a history or let host restart; here we reset for simplicity
+  await update(ref(db, 'lobbies/' + currentLobby), {
+    started: false,
+    voting: false
+  });
+  // clear votes and clues for next game
+  await set(ref(db, 'lobbies/' + currentLobby + '/votes'), {});
+  await set(ref(db, 'lobbies/' + currentLobby + '/clues'), []);
+}
+
 </script>
 </body>
 </html>
