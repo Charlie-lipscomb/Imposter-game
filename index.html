@@ -146,7 +146,6 @@ const maxRounds = 2; // clue cycles per player before voting
 const el = id => document.getElementById(id);
 
 /* ================= Big static noun list (no suffix tricks) ================= */
-/* ~500+ simple nouns – you can add more if you ever want to. */
 
 const NOUNS = [
   "APPLE","ORANGE","BANANA","GRAPE","MANGO","PEACH","PEAR","PLUM","CHERRY","LEMON",
@@ -210,7 +209,7 @@ const NOUNS = [
   "SCANNER","ROUTER","MODEM","SERVER","CONSOLE","CONTROLLER","JOYSTICK","HEADSET","SPEAKER","WEBCAM",
 
   "BALL","BAT","RACKET","NET","GOAL","HOOP","BOARD","DICE","CARD","TOKEN",
-  "PIECE","PUZZLE","BOARDGAME","CHESS","CHECKER","DOMINO","MARBLE","YOYO","KITE","FRISBEE",
+  "PIECE","PUZZLE","CHESS","DOMINO","MARBLE","YOYO","KITE","FRISBEE","HOCKEY","RUGBY",
 
   "COIN","NOTE","CARD","TICKET","PASS","VOUCHER","TOKEN","RECEIPT","INVOICE","BILL",
 
@@ -229,7 +228,7 @@ const NOUNS = [
 
   "SHEET","BLANKET","COVER","CURTAIN","BLIND","SHADE","SCREEN","CANOPY","TENT","FLAG",
 
-  "POSTBOX","MAILBOX","PARCEL","PACKAGE","DELIVERY","WRAPPER","RIBBON","LABEL","TAG","STAMP",
+  "POSTBOX","MAILBOX","PARCEL","PACKAGE","DELIVERY","WRAPPER","LABEL","TAG","STAMP","STRING",
 
   "FARM","BARN","STABLE","SHED","COOP","KENNEL","PEN","YARD","FIELD","MEADOW",
 
@@ -363,7 +362,7 @@ async function startNewRound(){
   };
 
   keys.forEach(k => {
-    updates["players/" + k + "/role"] = (k === newImposter ? "imposter" : "player";
+    updates["players/" + k + "/role"] = (k === newImposter ? "imposter" : "player");
   });
 
   await update(ref(db, "lobbies/" + currentLobby), updates);
@@ -430,6 +429,9 @@ function buildVoteList(players){
     };
     list.appendChild(b);
   });
+
+  // make sure vote button is enabled each new voting phase
+  el("submitVoteBtn").disabled = false;
 }
 
 async function submitVote(){
@@ -443,8 +445,8 @@ async function submitVote(){
 
 // Host auto-resolves votes whenever lobby updates
 async function tryResolveVotes(lobby){
-  if (lobby.voteResolved) return;
   if (!lobby.voting) return;
+  if (lobby.voteResolved) return;
 
   const votes = lobby.votes || {};
   const players = lobby.players || {};
