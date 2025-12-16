@@ -145,96 +145,102 @@ const maxRounds = 2; // clue cycles per player before voting
 
 const el = id => document.getElementById(id);
 
-/* ================= Base nouns (no prefixes) ================= */
-/* These are real, simple nouns. We’ll expand them with suffixes. */
+/* ================= Big static noun list (no suffix tricks) ================= */
+/* ~500+ simple nouns – you can add more if you ever want to. */
 
-const BASE_NOUNS = [
-  "APPLE","BANANA","ORANGE","GRAPE","MANGO","PEACH","CHERRY","BERRY","LEMON","LIME",
-  "CARROT","POTATO","TOMATO","ONION","GARLIC","PEPPER","CUCUMBER","BROCCOLI","CABBAGE","SPINACH",
-  "BREAD","BUTTER","CHEESE","PASTA","NOODLE","PIZZA","BURGER","SAUSAGE","SANDWICH","SALAD",
-  "COOKIE","BISCUIT","BROWNIE","MUFFIN","CAKE","WAFFLE","PANCAKE","CEREAL","CHOCOLATE","CANDY",
-  "WATER","JUICE","MILK","COFFEE","TEA","SODA","LEMONADE","SMOOTHIE","YOGURT","HONEY",
-  "HOUSE","HOME","COTTAGE","CABIN","CASTLE","PALACE","TEMPLE","CHURCH","MOSQUE","TOWER",
-  "BRIDGE","TUNNEL","STATION","AIRPORT","HARBOR","PORT","DOCK","GARAGE","KITCHEN","BEDROOM",
-  "BATHROOM","GARDEN","PARK","FOREST","JUNGLE","DESERT","MOUNTAIN","HILL","VALLEY","ISLAND",
-  "RIVER","STREAM","BROOK","LAKE","POND","OCEAN","SEA","BEACH","SHORE","COAST",
-  "CITY","TOWN","VILLAGE","SQUARE","MARKET","STREET","AVENUE","HIGHWAY","ALLEY","COURTYARD",
-  "TABLE","CHAIR","SOFA","COUCH","DESK","BED","MATTRESS","PILLOW","BLANKET","CUSHION",
-  "CARPET","RUG","CURTAIN","WINDOW","DOOR","FLOOR","CEILING","WALL","ROOF","STAIR",
-  "LAMP","LIGHT","CANDLE","LANTERN","TORCH","FLASHLIGHT","SCREEN","MONITOR","TV","RADIO",
-  "PHONE","LAPTOP","TABLET","KEYBOARD","MOUSE","TRACKPAD","PRINTER","SCANNER","SPEAKER","HEADPHONE",
-  "EARBUD","MICROPHONE","CAMERA","TRIPOD","REMOTE","CONSOLE","JOYSTICK","ROBOT","DRONE","BATTERY",
-  "CLOCK","WATCH","CALENDAR","DIARY","NOTEBOOK","JOURNAL","BOOK","NOVEL","COMIC","MAGAZINE",
-  "PAPER","PAGE","LETTER","ENVELOPE","STAMP","PACKAGE","PARCEL","BOX","BAG","BACKPACK",
-  "SUITCASE","WALLET","PURSE","POCKET","BELT","BUTTON","ZIPPER","RIBBON","STRING","ROPE",
-  "CHAIN","RING","NECKLACE","BRACELET","EARRING","CROWN","HELMET","MASK","HAT","CAP",
-  "SCARF","GLOVE","JACKET","COAT","SHIRT","TROUSER","JEANS","SHORTS","SKIRT","DRESS",
-  "SOCK","BOOT","SHOE","SNEAKER","SANDAL","UNIFORM","HOODIE","SWEATER","JERSEY","RAINCOAT",
-  "BALL","GOAL","NET","RACKET","BAT","CLUB","STICK","PUCK","BOARD","SKATE",
-  "SLED","HELMET","PAD","WHISTLE","TROPHY","MEDAL","AWARD","PRIZE","BADGE","TICKET",
-  "CAR","TRUCK","BUS","TRAIN","TRAM","SUBWAY","BICYCLE","SCOOTER","MOTORBIKE","SKATEBOARD",
-  "BOAT","SHIP","RAFT","SUBMARINE","ROCKET","PLANE","JET","GLIDER","BALLOON","HELICOPTER",
-  "DOG","CAT","RABBIT","HORSE","COW","SHEEP","GOAT","PIG","CHICKEN","DUCK",
-  "GOOSE","TURKEY","PIGEON","PARROT","EAGLE","OWL","HAWK","FALCON","DOVE","ROBIN",
-  "FROG","TOAD","SNAKE","LIZARD","TURTLE","CROCODILE","ALLIGATOR","SHARK","WHALE","DOLPHIN",
-  "SEAL","OTTER","PANDA","KOALA","MONKEY","GORILLA","TIGER","LION","LEOPARD","CHEETAH",
-  "BEAR","FOX","WOLF","DEER","MOOSE","ZEBRA","GIRAFFE","CAMEL","MOUSE","RAT",
-  "SPIDER","ANT","BEE","WASP","FLY","MOTH","BUTTERFLY","BEETLE","CRICKET","LOCUST",
-  "FLOWER","PETAL","LEAF","BRANCH","ROOT","TREE","BUSH","SHRUB","GRASS","MOSS",
-  "SEED","NUT","ACORN","CONE","BERRY","IVY","VINE","CLOVER","FERN","LOTUS",
-  "SUN","MOON","STAR","PLANET","COMET","METEOR","GALAXY","NEBULA","SPACE","ASTEROID",
-  "RAIN","CLOUD","STORM","THUNDER","LIGHTNING","SNOW","HAIL","WIND","BREEZE","FOG",
-  "MIST","ICE","FROST","SHADOW","SHADE","SUNSET","SUNRISE","MIDDAY","MIDNIGHT","DUSK",
-  "DAWN","MORNING","EVENING","NOON","NIGHT","DAYLIGHT","WEATHER","SEASON","WINTER","SPRING",
-  "SUMMER","AUTUMN","SMILE","LAUGH","TEAR","VOICE","SOUND","MUSIC","RHYTHM","MELODY",
-  "SONG","DRUM","GUITAR","PIANO","VIOLIN","TRUMPET","FLUTE","HORN","KEY","LOCK",
-  "MAP","GLOBE","FLAG","SIGN","SYMBOL","LOGO","ICON","IMAGE","PICTURE","PHOTO",
-  "PAINTING","DRAWING","SKETCH","DOODLE","CANVAS","EASEL","BRUSH","PALETTE","COLOR","INK",
-  "GLUE","SCISSOR","RULER","COMPASS","CALCULATOR","SPONGE","BROOM","MOP","BUCKET","BASKET",
-  "BIN","TRASHCAN","SINK","FAUCET","TAP","SHOWER","BATH","TOILET","SOAP","SHAMPOO",
-  "TOWEL","MIRROR","TILE","HANDLE","HINGE","SCREW","NAIL","HAMMER","WRENCH","PLIERS",
-  "DRILL","SAW","LADDER","BENCH","FENCE","GATE","POST","POLE","BARREL","CRATE",
-  "STATUE","VASE","ORNAMENT","TOY","DOLL","BLOCK","CARDS","PUZZLE","RIDDLE","GAME",
-  "COIN","NOTE","MONEY","BANK","WAGE","TAX","MARKET","SHOP","STORE","STALL",
-  "CUSTOMER","WAITER","TEACHER","STUDENT","DRIVER","WRITER","PAINTER","DOCTOR","NURSE","ACTOR",
-  "ARTIST","SINGER","DANCER","POLICE","FARMER","BUILDER","CHEF","BAKER","PLAYER","GOALKEEPER",
-  "CAPTAIN","LEADER","FRIEND","NEIGHBOR","STRANGER","CHILD","ADULT","PARENT","FAMILY","COUSIN",
-  "UNCLE","AUNT","SISTER","BROTHER","GRANDMA","GRANDPA","BABY","TEENAGER","CLASSMATE","PARTNER",
-  "BUBBLE","FOAM","POWDER","DUST","ASH","SMOKE","VAPOR","STEAM","SPARK","FLAME",
-  "EMBER","CINDER","BRICK","STONE","PEBBLE","ROCK","BOULDER","CLIFF","RIDGE","CAVE",
-  "CANYON","PLATEAU","FIELD","MEADOW","PRAIRIE","FARM","BARN","STABLE","ORCHARD","VINEYARD",
-  "TENT","CAMP","CABIN","LODGE","HOTEL","HOSTEL","INN","RESORT","MOTEL","HALL",
-  "GYM","COURT","ARENA","STADIUM","POOL","AQUARIUM","ZOO","PARKING","GARAGE","WORKSHOP",
-  "OFFICE","LAB","CLASSROOM","LIBRARY","CANTEEN","CAFETERIA","RESTAURANT","CAFE","KIOSK","COUNTER",
-  "MENU","RECIPE","OVEN","STOVE","FRIDGE","FREEZER","TOASTER","BLENDER","MIXER","KETTLE",
-  "PAN","POT","TRAY","GRILL","SPATULA","LADLE","WHISK","PEELER","GRATER","COLANDER",
-  "SIEVE","STRAINER","ROLLER","TONGS","OPENER","CORK","LABEL","JAR","TIN","CAN",
-  "CUPBOARD","DRAWER","SHELF","WARDROBE","LOCKER","SAFE","CHEST","TRUNK","BASKETBALL","FOOTBALL",
-  "HANDBALL","BASEBALL","CRICKET","HOCKEY","RUGBY","SOCCER","VOLLEYBALL","TENNIS","BADMINTON","TABLETENNIS",
-  "KITE","BALLOON","FIREWORK","SPARKLER","STRING","WIRE","CABLE","PIPE","TUBE","HOSE"
+const NOUNS = [
+  "APPLE","ORANGE","BANANA","GRAPE","MANGO","PEACH","PEAR","PLUM","CHERRY","LEMON",
+  "LIME","KIWI","PAPAYA","FIG","DATE","APRICOT","COCONUT","MELON","PUMPKIN","BERRY",
+
+  "CARROT","POTATO","ONION","GARLIC","BROCCOLI","CABBAGE","SPINACH","LETTUCE","TOMATO","CUCUMBER",
+  "PEPPER","CHILLI","BEETROOT","CELERY","PEA","BEAN","CORN","SQUASH","RADISH","TURNIP",
+
+  "BREAD","BUTTER","CHEESE","YOGURT","PIZZA","BURGER","SANDWICH","SAUSAGE","BACON","PASTA",
+  "NOODLE","OMELET","WAFFLE","PANCAKE","MUFFIN","BROWNIE","COOKIE","BISCUIT","CUPCAKE","CEREAL",
+
+  "WATER","JUICE","MILK","COFFEE","TEA","SODA","LEMONADE","SMOOTHIE","MILKSHAKE","COLA",
+
+  "HOUSE","FLAT","APARTMENT","COTTAGE","VILLA","CABIN","HUT","CASTLE","PALACE","MANSION",
+  "GARAGE","GARDEN","PATIO","BALCONY","ATTIC","BASEMENT","KITCHEN","BEDROOM","BATHROOM","HALLWAY",
+
+  "TABLE","CHAIR","SOFA","COUCH","ARMCHAIR","STOOL","BENCH","DESK","SHELF","BOOKCASE",
+  "WARDROBE","CUPBOARD","DRAWER","BED","MATTRESS","PILLOW","BLANKET","DUVET","CUSHION","CARPET",
+  "RUG","LAMP","LIGHT","LANTERN","CANDLE","MIRROR","CLOCK","PAINTING","POSTER","PICTURE",
+
+  "PLATE","BOWL","MUG","CUP","GLASS","BOTTLE","JUG","KETTLE","SAUCER","TRAY",
+  "FORK","SPOON","KNIFE","TEAPOT","PAN","POT","SKILLET","OVEN","STOVE","MICROWAVE",
+  "TOASTER","BLENDER","MIXER","FRIDGE","FREEZER","SINK","BIN","BASKET","BUCKET","SPONGE",
+
+  "TOOTHBRUSH","TOOTHPASTE","TOWEL","SOAP","SHAMPOO","LOTION","RAZOR","COMB","BRUSH","MIRROR",
+
+  "PEN","PENCIL","MARKER","CRAYON","HIGHLIGHTER","RULER","ERASER","NOTEBOOK","DIARY","JOURNAL",
+  "PAPER","ENVELOPE","FOLDER","BINDER","STAPLER","CLIP","SCISSORS","GLUE","TAPE","STAMP",
+
+  "BAG","BACKPACK","SUITCASE","WALLET","PURSE","BELT","SCARF","HAT","CAP","GLOVE",
+  "MITTEN","COAT","JACKET","SHIRT","TROUSERS","JEANS","SHORTS","SKIRT","DRESS","SOCK",
+  "BOOT","SHOE","TRAINER","SNEAKER","SANDAL","HOODIE","SWEATER","JUMPER","UNIFORM","JERSEY",
+
+  "RING","NECKLACE","BRACELET","EARRING","CROWN","MEDAL","TROPHY","BADGE","RIBBON","BROOCH",
+
+  "CAR","BUS","TRAIN","TRAM","SUBWAY","BIKE","BICYCLE","SCOOTER","SKATEBOARD","MOTORBIKE",
+  "TRUCK","LORRY","VAN","TAXI","BOAT","SHIP","FERRY","YACHT","RAFT","SUBMARINE",
+  "PLANE","JET","ROCKET","HELICOPTER","BALLOON","GLIDER","WAGON","CARRIAGE","SLED","KART",
+
+  "ROAD","STREET","AVENUE","HIGHWAY","BRIDGE","TUNNEL","CROSSING","PAVEMENT","SIDEWALK","PATH",
+  "PARK","PLAYGROUND","SQUARE","MARKET","SHOP","STORE","MALL","STALL","KIOSK","CAFE",
+  "RESTAURANT","HOTEL","MUSEUM","LIBRARY","THEATER","CINEMA","STADIUM","ARENA","SCHOOL","COLLEGE",
+  "UNIVERSITY","HOSPITAL","CLINIC","PHARMACY","STATION","AIRPORT","PORT","HARBOUR","FACTORY","OFFICE",
+
+  "CITY","TOWN","VILLAGE","CAPITAL","COUNTRY","ISLAND","MOUNTAIN","HILL","VALLEY","DESERT",
+  "FOREST","JUNGLE","MEADOW","FIELD","FARM","ORCHARD","GARDEN","PARKLAND","RIVER","STREAM",
+  "LAKE","POND","OCEAN","SEA","BAY","BEACH","CLIFF","CAVE","CANYON","PLATEAU",
+
+  "SUN","MOON","STAR","PLANET","COMET","ASTEROID","GALAXY","SPACE","SKY","CLOUD",
+  "RAIN","SNOW","HAIL","SLEET","MIST","FOG","STORM","THUNDER","LIGHTNING","RAINBOW",
+
+  "DOG","CAT","RABBIT","HAMSTER","MOUSE","RAT","HORSE","PONY","DONKEY","COW",
+  "SHEEP","GOAT","PIG","CHICKEN","DUCK","GOOSE","TURKEY","EAGLE","HAWK","OWL",
+  "PIGEON","SEAGULL","PARROT","SWAN","FLAMINGO","PANDA","KOALA","KANGAROO","TIGER","LION",
+  "LEOPARD","CHEETAH","JAGUAR","BEAR","WOLF","FOX","DEER","ELK","MOOSE","ZEBRA",
+  "GIRAFFE","HIPPO","RHINO","CROCODILE","ALLIGATOR","MONKEY","GORILLA","CHIMPANZEE","LEMUR","OTTER",
+  "DOLPHIN","WHALE","SHARK","SEAL","PENGUIN","TURTLE","LIZARD","SNAKE","FROG","TOAD",
+  "SPIDER","ANT","BEE","WASP","BUTTERFLY","MOTH","BEETLE","LADYBIRD","DRAGONFLY","CRICKET",
+
+  "COMPUTER","LAPTOP","TABLET","PHONE","MOBILE","SCREEN","MONITOR","MOUSE","KEYBOARD","PRINTER",
+  "SCANNER","ROUTER","MODEM","SERVER","CONSOLE","CONTROLLER","JOYSTICK","HEADSET","SPEAKER","WEBCAM",
+
+  "BALL","BAT","RACKET","NET","GOAL","HOOP","BOARD","DICE","CARD","TOKEN",
+  "PIECE","PUZZLE","BOARDGAME","CHESS","CHECKER","DOMINO","MARBLE","YOYO","KITE","FRISBEE",
+
+  "COIN","NOTE","CARD","TICKET","PASS","VOUCHER","TOKEN","RECEIPT","INVOICE","BILL",
+
+  "BRICK","STONE","ROCK","PEBBLE","SAND","GRAVEL","CLAY","CEMENT","GLUE","WIRE",
+  "CABLE","PIPE","CHAIN","ROPE","STRING","RUBBER","PLASTIC","METAL","IRON","STEEL",
+  "COPPER","SILVER","GOLD","BRONZE","WOOD","GLASS","FABRIC","LEATHER","PAPER","CARD",
+
+  "BOOK","NOVEL","STORY","COMIC","MAGAZINE","NEWSPAPER","DICTIONARY","ATLAS","GUIDE","MAP",
+
+  "BRUSH","BROOM","MOP","DUSTER","TOWEL","CLOTH","RAG","SPONGE","BUCKET","BIN",
+
+  "LOCK","KEY","HINGE","HANDLE","KNOB","LATCH","HOOK","NAIL","SCREW","BOLT",
+  "NUT","SPRING","GEAR","WHEEL","AXLE","ENGINE","MOTOR","FAN","PUMP","FILTER",
+
+  "DRUM","TRUMPET","FLUTE","VIOLIN","CELLO","PIANO","KEYBOARD","CLARINET","SAXOPHONE","TROMBONE",
+
+  "SHEET","BLANKET","COVER","CURTAIN","BLIND","SHADE","SCREEN","CANOPY","TENT","FLAG",
+
+  "POSTBOX","MAILBOX","PARCEL","PACKAGE","DELIVERY","WRAPPER","RIBBON","LABEL","TAG","STAMP",
+
+  "FARM","BARN","STABLE","SHED","COOP","KENNEL","PEN","YARD","FIELD","MEADOW",
+
+  "SUGAR","SALT","PEPPER","SPICE","HERB","SAUCE","KETCHUP","MUSTARD","GRAVY","OIL",
+
+  "BONE","SKULL","TOOTH","HEART","LUNG","BRAIN","MUSCLE","TONGUE","FINGER","THUMB",
+
+  "GATE","FENCE","WALL","RAIL","BARRIER","POST","POLE","SIGNPOST","LAMPPOST","TREE",
+
+  "BUSH","HEDGE","FLOWERBED","PLANT","SHRUB","WEED","GRASS","LAWN","MOSS","FERN"
 ];
-
-/* Generate expanded list with suffixes (no prefixes) */
-function buildNouns() {
-  const suffixes = ["", "S", "ER", "ERS", "ING", "ED"];
-  const set = new Set();
-
-  BASE_NOUNS.forEach(base => {
-    suffixes.forEach(s => {
-      const word = (base + s).toUpperCase();
-      // Basic length filter so they don't get huge
-      if (word.length >= 3 && word.length <= 12) {
-        set.add(word);
-      }
-    });
-  });
-
-  // Slice to roughly 3000 in case it overshoots
-  return Array.from(set).slice(0, 3000);
-}
-
-const NOUNS = buildNouns();
-// console.log("NOUNS SIZE:", NOUNS.length); // you can check in devtools if you want
 
 /* ================= Word picker ================= */
 
@@ -357,7 +363,7 @@ async function startNewRound(){
   };
 
   keys.forEach(k => {
-    updates["players/" + k + "/role"] = (k === newImposter ? "imposter" : "player");
+    updates["players/" + k + "/role"] = (k === newImposter ? "imposter" : "player";
   });
 
   await update(ref(db, "lobbies/" + currentLobby), updates);
@@ -408,18 +414,21 @@ async function submitClue(){
 /* ================= Voting ================= */
 
 function buildVoteList(players){
-  el("voteList").innerHTML = "";
+  const list = el("voteList");
+  list.innerHTML = "";
+  list.dataset.vote = "";
+
   Object.keys(players).forEach(k => {
     if (k === clientId) return;
     const b = document.createElement("button");
     b.textContent = players[k].name;
     b.style.display = "block";
     b.onclick = () => {
-      el("voteList").querySelectorAll("button").forEach(x => x.style.background = "");
+      list.querySelectorAll("button").forEach(x => x.style.background = "");
       b.style.background = "#4a90e2";
-      el("voteList").dataset.vote = k;
+      list.dataset.vote = k;
     };
-    el("voteList").appendChild(b);
+    list.appendChild(b);
   });
 }
 
@@ -427,24 +436,20 @@ async function submitVote(){
   const voted = el("voteList").dataset.vote;
   if (!voted) return alert("Pick a player");
 
-  await set(ref(db, "lobbies/" + currentLobby + "/votes/" + clientId), { voted });
+  el("submitVoteBtn").disabled = true;
 
-  const snap = await get(ref(db, "lobbies/" + currentLobby));
-  if (!snap.exists()) return;
-  const lobby = snap.val();
-  if (lobby.hostId === clientId) checkVotes();
+  await set(ref(db, "lobbies/" + currentLobby + "/votes/" + clientId), { voted });
 }
 
-async function checkVotes(){
-  const snap = await get(ref(db, "lobbies/" + currentLobby));
-  if (!snap.exists()) return;
-  const lobby = snap.val();
-
+// Host auto-resolves votes whenever lobby updates
+async function tryResolveVotes(lobby){
   if (lobby.voteResolved) return;
+  if (!lobby.voting) return;
 
   const votes = lobby.votes || {};
   const players = lobby.players || {};
   const playerIds = Object.keys(players);
+  if (playerIds.length === 0) return;
 
   if (Object.keys(votes).length < playerIds.length) return;
 
@@ -479,8 +484,8 @@ async function checkVotes(){
     voteResolved: true
   });
 
-  setTimeout(async () => {
-    await startNewRound();
+  setTimeout(() => {
+    startNewRound();
   }, 3000);
 }
 
@@ -541,7 +546,8 @@ function showTurnUI(lobby){
 /* ================= Live Sync ================= */
 
 function listenLobby(code){
-  onValue(ref(db, "lobbies/" + code), snap => {
+  const lobbyRef = ref(db, "lobbies/" + code);
+  onValue(lobbyRef, snap => {
     const data = snap.val();
     if (!data) return;
 
@@ -562,6 +568,11 @@ function listenLobby(code){
 
     renderClues(data.clues || [], data.players || {});
     showTurnUI(data);
+
+    // Host auto-resolves voting when all votes are in
+    if (data.hostId === clientId) {
+      tryResolveVotes(data);
+    }
   });
 }
 
