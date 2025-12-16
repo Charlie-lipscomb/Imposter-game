@@ -141,47 +141,47 @@ let clientId = localStorage.getItem("id") || ("c_" + Math.random().toString(36).
 localStorage.setItem("id", clientId);
 
 let currentLobby = null;
-const maxRounds = 2; // number of clue cycles per player before voting
+const maxRounds = 2; // clue cycles before voting
 
 const el = id => document.getElementById(id);
 
-/* ================= Word picker via Random Word API ================= */
+/* ================= Noun‑only word picker ================= */
 
-const FALLBACK_WORDS = [
+const FALLBACK_NOUNS = [
   "PIZZA","CASTLE","BANANA","ROCKET",
   "JUNGLE","BOTTLE","PLANET","MONKEY",
   "OCEAN","DRAGON"
 ];
 
 async function getRandomWord() {
-  // Try up to 5 times to get a reasonable word
+  // Try several times to get a good noun from the API
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const res = await fetch("https://random-word-api.herokuapp.com/word?number=1");
+      const res = await fetch("https://random-word-form.herokuapp.com/random/noun");
       if (!res.ok) throw new Error("Bad response");
 
       const data = await res.json();
       let w = String(data[0] || "").trim();
 
-      // letters only
+      // keep only letters
       w = w.replace(/[^a-zA-Z]/g, "");
       if (!w) continue;
 
       const upper = w.toUpperCase();
       const len = upper.length;
 
-      // only accept 4–6 letter words
+      // simple game‑friendly nouns: 4–6 letters
       if (len >= 4 && len <= 6) {
         return upper;
       }
     } catch (e) {
-      console.error("Word API attempt failed:", e);
+      console.error("Noun API attempt failed:", e);
     }
   }
 
-  // fallback if API fails or words are weird
-  const idx = Math.floor(Math.random() * FALLBACK_WORDS.length);
-  return FALLBACK_WORDS[idx];
+  // fallback to a local noun list
+  const idx = Math.floor(Math.random() * FALLBACK_NOUNS.length);
+  return FALLBACK_NOUNS[idx];
 }
 
 /* ================= Helpers ================= */
@@ -257,7 +257,7 @@ async function startGame(){
   await startNewRound();
 }
 
-// Always picks a NEW word + NEW imposter each round
+// Always picks a NEW noun + NEW imposter each round
 async function startNewRound(){
   const snap = await get(ref(db, "lobbies/" + currentLobby));
   if (!snap.exists()) return;
@@ -297,7 +297,7 @@ async function startNewRound(){
   await set(ref(db, "lobbies/" + currentLobby + "/votes"), {});
 }
 
-/* ================= Clues (fixed final-turn behaviour) ================= */
+/* ================= Clues (turn order logic) ================= */
 
 async function submitClue(){
   const clue = el("clueInput").value.trim();
@@ -328,8 +328,7 @@ async function submitClue(){
     round: Math.min(maxRounds, cycle)
   };
 
-  // When we've finished the last player's clue of the final round,
-  // go to voting instead of another turn.
+  // After the last player's clue in the final round → go to voting
   if (cycle >= maxRounds && nextTurn === 0) {
     updates.voting = true;
     updates.voteResolved = false;
@@ -365,7 +364,7 @@ async function submitVote(){
 
   await set(ref(db, "lobbies/" + currentLobby + "/votes/" + clientId), { voted });
 
-  // Only host tallies to avoid multiple checks
+  // Only host tallies to avoid multiple race conditions
   const snap = await get(ref(db, "lobbies/" + currentLobby));
   if (!snap.exists()) return;
   const lobby = snap.val();
