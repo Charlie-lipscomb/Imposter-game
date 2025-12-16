@@ -145,60 +145,102 @@ const maxRounds = 2; // clue cycles per player before voting
 
 const el = id => document.getElementById(id);
 
-/* ================= Word picker (nouns first, then backup) ================= */
+/* ================= Base nouns (no prefixes) ================= */
+/* These are real, simple nouns. We’ll expand them with suffixes. */
 
-const FALLBACK_NOUNS = [
-  "PIZZA","CASTLE","BANANA","ROCKET",
-  "JUNGLE","BOTTLE","PLANET","MONKEY",
-  "OCEAN","DRAGON"
+const BASE_NOUNS = [
+  "APPLE","BANANA","ORANGE","GRAPE","MANGO","PEACH","CHERRY","BERRY","LEMON","LIME",
+  "CARROT","POTATO","TOMATO","ONION","GARLIC","PEPPER","CUCUMBER","BROCCOLI","CABBAGE","SPINACH",
+  "BREAD","BUTTER","CHEESE","PASTA","NOODLE","PIZZA","BURGER","SAUSAGE","SANDWICH","SALAD",
+  "COOKIE","BISCUIT","BROWNIE","MUFFIN","CAKE","WAFFLE","PANCAKE","CEREAL","CHOCOLATE","CANDY",
+  "WATER","JUICE","MILK","COFFEE","TEA","SODA","LEMONADE","SMOOTHIE","YOGURT","HONEY",
+  "HOUSE","HOME","COTTAGE","CABIN","CASTLE","PALACE","TEMPLE","CHURCH","MOSQUE","TOWER",
+  "BRIDGE","TUNNEL","STATION","AIRPORT","HARBOR","PORT","DOCK","GARAGE","KITCHEN","BEDROOM",
+  "BATHROOM","GARDEN","PARK","FOREST","JUNGLE","DESERT","MOUNTAIN","HILL","VALLEY","ISLAND",
+  "RIVER","STREAM","BROOK","LAKE","POND","OCEAN","SEA","BEACH","SHORE","COAST",
+  "CITY","TOWN","VILLAGE","SQUARE","MARKET","STREET","AVENUE","HIGHWAY","ALLEY","COURTYARD",
+  "TABLE","CHAIR","SOFA","COUCH","DESK","BED","MATTRESS","PILLOW","BLANKET","CUSHION",
+  "CARPET","RUG","CURTAIN","WINDOW","DOOR","FLOOR","CEILING","WALL","ROOF","STAIR",
+  "LAMP","LIGHT","CANDLE","LANTERN","TORCH","FLASHLIGHT","SCREEN","MONITOR","TV","RADIO",
+  "PHONE","LAPTOP","TABLET","KEYBOARD","MOUSE","TRACKPAD","PRINTER","SCANNER","SPEAKER","HEADPHONE",
+  "EARBUD","MICROPHONE","CAMERA","TRIPOD","REMOTE","CONSOLE","JOYSTICK","ROBOT","DRONE","BATTERY",
+  "CLOCK","WATCH","CALENDAR","DIARY","NOTEBOOK","JOURNAL","BOOK","NOVEL","COMIC","MAGAZINE",
+  "PAPER","PAGE","LETTER","ENVELOPE","STAMP","PACKAGE","PARCEL","BOX","BAG","BACKPACK",
+  "SUITCASE","WALLET","PURSE","POCKET","BELT","BUTTON","ZIPPER","RIBBON","STRING","ROPE",
+  "CHAIN","RING","NECKLACE","BRACELET","EARRING","CROWN","HELMET","MASK","HAT","CAP",
+  "SCARF","GLOVE","JACKET","COAT","SHIRT","TROUSER","JEANS","SHORTS","SKIRT","DRESS",
+  "SOCK","BOOT","SHOE","SNEAKER","SANDAL","UNIFORM","HOODIE","SWEATER","JERSEY","RAINCOAT",
+  "BALL","GOAL","NET","RACKET","BAT","CLUB","STICK","PUCK","BOARD","SKATE",
+  "SLED","HELMET","PAD","WHISTLE","TROPHY","MEDAL","AWARD","PRIZE","BADGE","TICKET",
+  "CAR","TRUCK","BUS","TRAIN","TRAM","SUBWAY","BICYCLE","SCOOTER","MOTORBIKE","SKATEBOARD",
+  "BOAT","SHIP","RAFT","SUBMARINE","ROCKET","PLANE","JET","GLIDER","BALLOON","HELICOPTER",
+  "DOG","CAT","RABBIT","HORSE","COW","SHEEP","GOAT","PIG","CHICKEN","DUCK",
+  "GOOSE","TURKEY","PIGEON","PARROT","EAGLE","OWL","HAWK","FALCON","DOVE","ROBIN",
+  "FROG","TOAD","SNAKE","LIZARD","TURTLE","CROCODILE","ALLIGATOR","SHARK","WHALE","DOLPHIN",
+  "SEAL","OTTER","PANDA","KOALA","MONKEY","GORILLA","TIGER","LION","LEOPARD","CHEETAH",
+  "BEAR","FOX","WOLF","DEER","MOOSE","ZEBRA","GIRAFFE","CAMEL","MOUSE","RAT",
+  "SPIDER","ANT","BEE","WASP","FLY","MOTH","BUTTERFLY","BEETLE","CRICKET","LOCUST",
+  "FLOWER","PETAL","LEAF","BRANCH","ROOT","TREE","BUSH","SHRUB","GRASS","MOSS",
+  "SEED","NUT","ACORN","CONE","BERRY","IVY","VINE","CLOVER","FERN","LOTUS",
+  "SUN","MOON","STAR","PLANET","COMET","METEOR","GALAXY","NEBULA","SPACE","ASTEROID",
+  "RAIN","CLOUD","STORM","THUNDER","LIGHTNING","SNOW","HAIL","WIND","BREEZE","FOG",
+  "MIST","ICE","FROST","SHADOW","SHADE","SUNSET","SUNRISE","MIDDAY","MIDNIGHT","DUSK",
+  "DAWN","MORNING","EVENING","NOON","NIGHT","DAYLIGHT","WEATHER","SEASON","WINTER","SPRING",
+  "SUMMER","AUTUMN","SMILE","LAUGH","TEAR","VOICE","SOUND","MUSIC","RHYTHM","MELODY",
+  "SONG","DRUM","GUITAR","PIANO","VIOLIN","TRUMPET","FLUTE","HORN","KEY","LOCK",
+  "MAP","GLOBE","FLAG","SIGN","SYMBOL","LOGO","ICON","IMAGE","PICTURE","PHOTO",
+  "PAINTING","DRAWING","SKETCH","DOODLE","CANVAS","EASEL","BRUSH","PALETTE","COLOR","INK",
+  "GLUE","SCISSOR","RULER","COMPASS","CALCULATOR","SPONGE","BROOM","MOP","BUCKET","BASKET",
+  "BIN","TRASHCAN","SINK","FAUCET","TAP","SHOWER","BATH","TOILET","SOAP","SHAMPOO",
+  "TOWEL","MIRROR","TILE","HANDLE","HINGE","SCREW","NAIL","HAMMER","WRENCH","PLIERS",
+  "DRILL","SAW","LADDER","BENCH","FENCE","GATE","POST","POLE","BARREL","CRATE",
+  "STATUE","VASE","ORNAMENT","TOY","DOLL","BLOCK","CARDS","PUZZLE","RIDDLE","GAME",
+  "COIN","NOTE","MONEY","BANK","WAGE","TAX","MARKET","SHOP","STORE","STALL",
+  "CUSTOMER","WAITER","TEACHER","STUDENT","DRIVER","WRITER","PAINTER","DOCTOR","NURSE","ACTOR",
+  "ARTIST","SINGER","DANCER","POLICE","FARMER","BUILDER","CHEF","BAKER","PLAYER","GOALKEEPER",
+  "CAPTAIN","LEADER","FRIEND","NEIGHBOR","STRANGER","CHILD","ADULT","PARENT","FAMILY","COUSIN",
+  "UNCLE","AUNT","SISTER","BROTHER","GRANDMA","GRANDPA","BABY","TEENAGER","CLASSMATE","PARTNER",
+  "BUBBLE","FOAM","POWDER","DUST","ASH","SMOKE","VAPOR","STEAM","SPARK","FLAME",
+  "EMBER","CINDER","BRICK","STONE","PEBBLE","ROCK","BOULDER","CLIFF","RIDGE","CAVE",
+  "CANYON","PLATEAU","FIELD","MEADOW","PRAIRIE","FARM","BARN","STABLE","ORCHARD","VINEYARD",
+  "TENT","CAMP","CABIN","LODGE","HOTEL","HOSTEL","INN","RESORT","MOTEL","HALL",
+  "GYM","COURT","ARENA","STADIUM","POOL","AQUARIUM","ZOO","PARKING","GARAGE","WORKSHOP",
+  "OFFICE","LAB","CLASSROOM","LIBRARY","CANTEEN","CAFETERIA","RESTAURANT","CAFE","KIOSK","COUNTER",
+  "MENU","RECIPE","OVEN","STOVE","FRIDGE","FREEZER","TOASTER","BLENDER","MIXER","KETTLE",
+  "PAN","POT","TRAY","GRILL","SPATULA","LADLE","WHISK","PEELER","GRATER","COLANDER",
+  "SIEVE","STRAINER","ROLLER","TONGS","OPENER","CORK","LABEL","JAR","TIN","CAN",
+  "CUPBOARD","DRAWER","SHELF","WARDROBE","LOCKER","SAFE","CHEST","TRUNK","BASKETBALL","FOOTBALL",
+  "HANDBALL","BASEBALL","CRICKET","HOCKEY","RUGBY","SOCCER","VOLLEYBALL","TENNIS","BADMINTON","TABLETENNIS",
+  "KITE","BALLOON","FIREWORK","SPARKLER","STRING","WIRE","CABLE","PIPE","TUBE","HOSE"
 ];
 
-async function getRandomWord() {
-  // Try up to 5 times to get a good word
-  for (let attempt = 0; attempt < 5; attempt++) {
+/* Generate expanded list with suffixes (no prefixes) */
+function buildNouns() {
+  const suffixes = ["", "S", "ER", "ERS", "ING", "ED"];
+  const set = new Set();
 
-    // 1) Try noun‑only API
-    try {
-      const resNoun = await fetch("https://random-word-form.herokuapp.com/random/noun");
-      if (resNoun.ok) {
-        const dataNoun = await resNoun.json();
-        let w = String(dataNoun[0] || "").trim();
-        w = w.replace(/[^a-zA-Z]/g, "");
-        if (w) {
-          const upper = w.toUpperCase();
-          const len = upper.length;
-          if (len >= 4 && len <= 6) {
-            return upper;
-          }
-        }
+  BASE_NOUNS.forEach(base => {
+    suffixes.forEach(s => {
+      const word = (base + s).toUpperCase();
+      // Basic length filter so they don't get huge
+      if (word.length >= 3 && word.length <= 12) {
+        set.add(word);
       }
-    } catch (e) {
-      console.error("Noun API failed:", e);
-    }
+    });
+  });
 
-    // 2) Backup: Random Word API (any word), still filtered by length
-    try {
-      const resAny = await fetch("https://random-word-api.herokuapp.com/word?number=1");
-      if (resAny.ok) {
-        const dataAny = await resAny.json();
-        let w2 = String(dataAny[0] || "").trim();
-        w2 = w2.replace(/[^a-zA-Z]/g, "");
-        if (w2) {
-          const upper2 = w2.toUpperCase();
-          const len2 = upper2.length;
-          if (len2 >= 4 && len2 <= 6) {
-            return upper2;
-          }
-        }
-      }
-    } catch (e2) {
-      console.error("Backup word API failed:", e2);
-    }
-  }
+  // Slice to roughly 3000 in case it overshoots
+  return Array.from(set).slice(0, 3000);
+}
 
-  // 3) Final fallback: local nouns
-  const idx = Math.floor(Math.random() * FALLBACK_NOUNS.length);
-  return FALLBACK_NOUNS[idx];
+const NOUNS = buildNouns();
+// console.log("NOUNS SIZE:", NOUNS.length); // you can check in devtools if you want
+
+/* ================= Word picker ================= */
+
+function getRandomWord() {
+  const idx = Math.floor(Math.random() * NOUNS.length);
+  return NOUNS[idx];
 }
 
 /* ================= Helpers ================= */
@@ -274,7 +316,7 @@ async function startGame(){
   await startNewRound();
 }
 
-// Always picks a NEW word + NEW imposter each round
+// New word + new imposter each round
 async function startNewRound(){
   const snap = await get(ref(db, "lobbies/" + currentLobby));
   if (!snap.exists()) return;
@@ -290,8 +332,15 @@ async function startNewRound(){
     return;
   }
 
-  const newWord = await getRandomWord();
-  const newImposter = keys[Math.floor(Math.random() * keys.length)];
+  const newWord = getRandomWord();
+
+  const prevImposter = lobby.lastImposter || null;
+  let newImposter = keys[Math.floor(Math.random() * keys.length)];
+  if (prevImposter && keys.length > 1 && keys.includes(prevImposter)) {
+    const others = keys.filter(k => k !== prevImposter);
+    newImposter = others[Math.floor(Math.random() * others.length)];
+  }
+
   const newOrder = keys.slice().sort(() => Math.random() - 0.5);
 
   const updates = {
@@ -303,7 +352,8 @@ async function startNewRound(){
     currentTurn: 0,
     clues: [],
     round: 1,
-    resultsMessage: ""
+    resultsMessage: "",
+    lastImposter: newImposter
   };
 
   keys.forEach(k => {
@@ -329,7 +379,6 @@ async function submitClue(){
   const playersCount = order.length || 1;
   const currentTurn = lobby.currentTurn ?? 0;
 
-  // add this clue
   clues.push({
     player: clientId,
     text: clue,
@@ -337,7 +386,7 @@ async function submitClue(){
   });
 
   const totalClues = clues.length;
-  const cycle = Math.ceil(totalClues / playersCount); // 1, 2, ...
+  const cycle = Math.ceil(totalClues / playersCount);
   const nextTurn = (currentTurn + 1) % playersCount;
 
   const updates = {
@@ -345,7 +394,6 @@ async function submitClue(){
     round: Math.min(maxRounds, cycle)
   };
 
-  // After the last player's clue in the final round → go to voting
   if (cycle >= maxRounds && nextTurn === 0) {
     updates.voting = true;
     updates.voteResolved = false;
@@ -381,7 +429,6 @@ async function submitVote(){
 
   await set(ref(db, "lobbies/" + currentLobby + "/votes/" + clientId), { voted });
 
-  // Only host tallies
   const snap = await get(ref(db, "lobbies/" + currentLobby));
   if (!snap.exists()) return;
   const lobby = snap.val();
@@ -393,16 +440,14 @@ async function checkVotes(){
   if (!snap.exists()) return;
   const lobby = snap.val();
 
-  if (lobby.voteResolved) return; // already handled
+  if (lobby.voteResolved) return;
 
   const votes = lobby.votes || {};
   const players = lobby.players || {};
   const playerIds = Object.keys(players);
 
-  // Wait for all players to vote
   if (Object.keys(votes).length < playerIds.length) return;
 
-  // Count votes
   const counts = {};
   Object.values(votes).forEach(v => {
     counts[v.voted] = (counts[v.voted] || 0) + 1;
@@ -434,7 +479,6 @@ async function checkVotes(){
     voteResolved: true
   });
 
-  // Start a fresh round after a short delay
   setTimeout(async () => {
     await startNewRound();
   }, 3000);
@@ -504,7 +548,6 @@ function listenLobby(code){
     renderPlayers(data.players || {});
     updateStartButtonUI(data);
 
-    el("lobbyCard").display = data.started ? "none" : "block";
     el("lobbyCard").style.display = data.started ? "none" : "block";
     el("gameUI").style.display = data.started ? "block" : "none";
 
