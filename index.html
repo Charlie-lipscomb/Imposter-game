@@ -141,11 +141,11 @@ let clientId = localStorage.getItem("id") || ("c_" + Math.random().toString(36).
 localStorage.setItem("id", clientId);
 
 let currentLobby = null;
-const maxRounds = 2; // clue cycles before voting
+const maxRounds = 2; // clue cycles per player before voting
 
 const el = id => document.getElementById(id);
 
-/* ================= Noun‑only word picker ================= */
+/* ================= Word picker (nouns first, then backup) ================= */
 
 const FALLBACK_NOUNS = [
   "PIZZA","CASTLE","BANANA","ROCKET",
@@ -154,32 +154,49 @@ const FALLBACK_NOUNS = [
 ];
 
 async function getRandomWord() {
-  // Try several times to get a good noun from the API
+  // Try up to 5 times to get a good word
   for (let attempt = 0; attempt < 5; attempt++) {
+
+    // 1) Try noun‑only API
     try {
-      const res = await fetch("https://random-word-form.herokuapp.com/random/noun");
-      if (!res.ok) throw new Error("Bad response");
-
-      const data = await res.json();
-      let w = String(data[0] || "").trim();
-
-      // keep only letters
-      w = w.replace(/[^a-zA-Z]/g, "");
-      if (!w) continue;
-
-      const upper = w.toUpperCase();
-      const len = upper.length;
-
-      // simple game‑friendly nouns: 4–6 letters
-      if (len >= 4 && len <= 6) {
-        return upper;
+      const resNoun = await fetch("https://random-word-form.herokuapp.com/random/noun");
+      if (resNoun.ok) {
+        const dataNoun = await resNoun.json();
+        let w = String(dataNoun[0] || "").trim();
+        w = w.replace(/[^a-zA-Z]/g, "");
+        if (w) {
+          const upper = w.toUpperCase();
+          const len = upper.length;
+          if (len >= 4 && len <= 6) {
+            return upper;
+          }
+        }
       }
     } catch (e) {
-      console.error("Noun API attempt failed:", e);
+      console.error("Noun API failed:", e);
+    }
+
+    // 2) Backup: Random Word API (any word), still filtered by length
+    try {
+      const resAny = await fetch("https://random-word-api.herokuapp.com/word?number=1");
+      if (resAny.ok) {
+        const dataAny = await resAny.json();
+        let w2 = String(dataAny[0] || "").trim();
+        w2 = w2.replace(/[^a-zA-Z]/g, "");
+        if (w2) {
+          const upper2 = w2.toUpperCase();
+          const len2 = upper2.length;
+          if (len2 >= 4 && len2 <= 6) {
+            return upper2;
+          }
+        }
+      }
+    } catch (e2) {
+      console.error("Backup word API failed:", e2);
     }
   }
 
-  // fallback to a local noun list
+  // 3) Final fallback: local nouns
   const idx = Math.floor(Math.random() * FALLBACK_NOUNS.length);
   return FALLBACK_NOUNS[idx];
 }
@@ -257,7 +274,7 @@ async function startGame(){
   await startNewRound();
 }
 
-// Always picks a NEW noun + NEW imposter each round
+// Always picks a NEW word + NEW imposter each round
 async function startNewRound(){
   const snap = await get(ref(db, "lobbies/" + currentLobby));
   if (!snap.exists()) return;
@@ -297,7 +314,7 @@ async function startNewRound(){
   await set(ref(db, "lobbies/" + currentLobby + "/votes"), {});
 }
 
-/* ================= Clues (turn order logic) ================= */
+/* ================= Clues (turn order) ================= */
 
 async function submitClue(){
   const clue = el("clueInput").value.trim();
@@ -364,7 +381,7 @@ async function submitVote(){
 
   await set(ref(db, "lobbies/" + currentLobby + "/votes/" + clientId), { voted });
 
-  // Only host tallies to avoid multiple race conditions
+  // Only host tallies
   const snap = await get(ref(db, "lobbies/" + currentLobby));
   if (!snap.exists()) return;
   const lobby = snap.val();
@@ -487,6 +504,7 @@ function listenLobby(code){
     renderPlayers(data.players || {});
     updateStartButtonUI(data);
 
+    el("lobbyCard").display = data.started ? "none" : "block";
     el("lobbyCard").style.display = data.started ? "none" : "block";
     el("gameUI").style.display = data.started ? "block" : "none";
 
